@@ -1,0 +1,54 @@
+# ============================================================
+# Shopify Storefront GraphQL 配置
+# Tool 级别的 timeout/headers/cookies 使用 _ljp 默认值
+# ============================================================
+
+# ── 必填 ──
+site_name = "example-store"
+base_url = "https://www.example.com"
+home_url = "https://www.example.com/"
+brand = "Example Store"
+site = "example"                   # 站点简称，文件命名前缀
+
+# ── 留空自动发现（从首页 JS 提取）──
+store_domain = ""
+storefront_token = ""
+
+# ── GraphQL API ──
+api_version = "2026-04"
+country = "US"
+language = "EN"
+currency = "USD"
+
+# ── 导航 ──
+menu_handles = ["main-menu"]
+exclude_collection_patterns = [
+    "(^|[-_ ])(test|hidden|do[-_ ]?not[-_ ]?use)([-_ ]|$)"
+]
+
+# ── 图片按变体颜色分组 ──
+image_group_options = ["Color", "Colour", "Style"]
+
+# ── 引擎请求延迟（秒）──
+request_delay_range = [0.15, 0.35]
+
+# ── 自定义字段 ──
+# [[custom_fields]]
+# name = "Details"
+# source = "html"
+# xpath = "//*[@data-testid='product-tab-panel-details']"
+
+# ── Remix Data 配置 ──
+# [remix_data]
+# suffix = ".data"
+# variant_parameter = "v"
+# routes_parameter = "_routes"
+# routes = ["routes/($locale)", "routes/($locale).products.$handle"]
+
+# ── 运行时 ──
+run_mode = "auto"                  # auto / sample / full
+sample_limit = 10
+full_threshold = 500
+max_url_pages = 10
+resume = true
+zk = 0                             # 折扣 0=原价 0.2=8折
