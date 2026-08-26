@@ -126,6 +126,12 @@ class GetDetail(Base):
                     f"第 {pagemodel.page} 页命中缓存，商品 {count} 条：{pagemodel.url}",
                     color='green',
                 )
+            elif pagemodel.is_fail():
+                self.Tool.print(
+                    f"【分类 {category_idx}/{self.total_category} | {name}】"
+                    f"第 {pagemodel.page} 页抓取失败,等待下次运行重试",
+                )
+                break
             else:
                 self.Tool.print(
                     f"【分类 {category_idx}/{self.total_category} | {name}】"
@@ -162,6 +168,31 @@ class GetDetail(Base):
 
         return url,name,category_idx
 
+
+    def output_res(self):
+        # 扁平化 index：index_id -> data 列表，解决分页数据按 next_url 存储导致汇总丢失的问题
+        global_data = {}
+        for pages in self.index.data.values():
+            if not isinstance(pages, dict):
+                continue
+            for index_id, item in pages.items():
+                if isinstance(item, dict):
+                    global_data[index_id] = item.get('data', [])
+
+        res_dic = {}
+        for name, seq_dict in self.catch.data.items():
+            ls = []
+            for seq_id in seq_dict:
+                ls.extend(global_data.get(seq_id, []))
+            ls = list(dict.fromkeys(ls))
+            ls = [u for u in ls if u not in self.skip_output_url_ls]
+            res_dic[name] = ls
+            self.Tool.print(f"  分类「{name}」：汇总到 {len(ls)} 条商品链接。", color='cyan')
+
+        self.Tool.File.save_json(res_dic, self.save_path)
+
+        return res_dic
+
     def run(self):
         self.Tool.print(f"开始处理，共 {self.total_category} 个分类。", color='cyan')
 
@@ -187,26 +218,7 @@ class GetDetail(Base):
 
         self.Tool.print("所有分类抓取完成，开始汇总输出最终详情链接……", color='green')
 
-        # 扁平化 index：index_id -> data 列表，解决分页数据按 next_url 存储导致汇总丢失的问题
-        global_data = {}
-        for pages in self.index.data.values():
-            if not isinstance(pages, dict):
-                continue
-            for index_id, item in pages.items():
-                if isinstance(item, dict):
-                    global_data[index_id] = item.get('data', [])
-
-        res_dic = {}
-        for name, seq_dict in self.catch.data.items():
-            ls = []
-            for seq_id in seq_dict:
-                ls.extend(global_data.get(seq_id, []))
-            ls = list(dict.fromkeys(ls))
-            ls = [u for u in ls if u not in self.skip_output_url_ls]
-            res_dic[name] = ls
-            self.Tool.print(f"  分类「{name}」：汇总到 {len(ls)} 条商品链接。", color='cyan')
-
-        self.Tool.File.save_json(res_dic, self.save_path)
+        res_dic = self.output_res()
         total = sum(len(v) for v in res_dic.values())
         self.Tool.print(
             f"任务全部完成！汇总详情 URL 总数：{total}，结果保存至 {self.save_path}",

@@ -6,7 +6,7 @@ import re
 from lxml import etree
 from curl_cffi import requests
 
-
+from _ljp import File
 
 cookies = {
         'csm-sid': '947-6297101-4100033',
@@ -118,6 +118,42 @@ from _ljp.mb.base import GetDetail
 from _ljp.mb.model import PageModel
 
 class YMXStep2(GetDetail):
+
+    def output_res(self):
+        # 扁平化 index：index_id -> data 列表，解决分页数据按 next_url 存储导致汇总丢失的问题
+        global_data = {}
+        for pages in self.index.data.values():
+            if not isinstance(pages, dict):
+                continue
+            for index_id, item in pages.items():
+                if isinstance(item, dict):
+                    global_data[index_id] = item.get('data', [])
+
+        ys_dic = {}
+        for parent_id,data in self.index.data.items():
+            for zl_data in data.values():
+                for zl_id in zl_data['data']:
+                    ys_dic[zl_id] = parent_id
+        self.Tool.File.save_json(ys_dic,self.Tool.File.path_add_site('data/变体id映射表.json'))
+
+
+        res_dic = {}
+        for name, seq_dict in self.catch.data.items():
+            ls = []
+            for seq_id in seq_dict:
+                ls.extend(global_data.get(seq_id, []))
+            ls = list(dict.fromkeys(ls))
+            ls = [u for u in ls if u not in self.skip_output_url_ls]
+            res_dic[name] = ls
+            self.Tool.print(f"  分类「{name}」：汇总到 {len(ls)} 条商品链接。", color='cyan')
+
+        self.Tool.File.save_json(res_dic, self.save_path)
+
+        return res_dic
+
+
+
+
     def fetch_page(self, P:PageModel, params):
 
         url = f'https://www.amazon.com/dp/{P.url}?th=1&psc=1'
@@ -149,7 +185,7 @@ class YMXStep2(GetDetail):
                 P.set_end()
                 print("    ⚠️ 该页面未发现任何变体数据")
 
-            time.sleep(2)
+            time.sleep(1)
 
             return variants, None
 

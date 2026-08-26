@@ -4,16 +4,57 @@ import json
 import re
 import time
 import html as html_parser
+
+from DrissionPage import ChromiumPage, ChromiumOptions
+
 from _ljp.mb.base import Step4 as BaseStep4
 
 
 class Step4(BaseStep4):
     """Target parser adapted from the template; cache/output are owned by BaseStep4."""
 
-    def __init__(self, tool, *args, initial_wait=3, max_wait_price=12, **kwargs):
-        self.initial_wait = initial_wait
-        self.max_wait_price = max_wait_price
-        super().__init__(tool, *args, **kwargs)
+
+    def _init(self):
+        super()._init()
+        self.init()
+
+    def init(self,proxy="127.0.0.1:7897", headless=False, wait_time=15,
+                 num_threads=3, max_wait_price=12):
+        self.proxy = proxy
+        self.headless = headless
+        self.wait_time = wait_time  # 初始页面加载等待（秒）
+        self.max_wait_price = max_wait_price  # 智能等待价格元素出现的最长时间（秒）
+        self.num_threads = num_threads  # 并行标签页数量
+
+
+        browser = self._create_browser()
+        self.tab_ls = [browser.new_tab() for i in range(self.max_threads)]
+
+        from itertools import cycle
+        cycle_iter = cycle(self.tab_ls)
+
+        def get_next():
+            return next(cycle_iter)
+        self.get_tab = get_next
+
+    def _create_browser(self):
+        """创建并配置 DrissionPage 浏览器"""
+        co = ChromiumOptions()
+        if self.proxy:
+            co.set_proxy(f"http://{self.proxy}")
+        co.headless(self.headless)
+        co.set_argument("--disable-blink-features=AutomationControlled")
+        co.set_argument("--no-first-run")
+        co.set_argument("--no-default-browser-check")
+        co.set_argument("--disable-infobars")
+        co.set_user_agent(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36"
+        )
+        return ChromiumPage(co)
+
+
 
     def load_tasks(self):
         """Also accept the template's historical flat Target URL JSON input."""
@@ -339,6 +380,12 @@ class Step4(BaseStep4):
 
     def process_product(self, page, url):
         """处理单个商品页面，返回 CSV 行列表"""
+
+        page.get(url)
+        # 优化: 先等一个较短的基础时间让页面框架加载
+        time.sleep(3)
+        # 智能等待价格元素出现（最多 max_wait_price 秒，通常3-5秒就好）
+        self._wait_for_price_ready(page)
         next_data = self._extract_next_data(page)
         product_node = self._extract_product_node_from_next_data(next_data)
         if not product_node:
@@ -349,8 +396,7 @@ class Step4(BaseStep4):
         if isinstance(tcin, type(re.search(r'', ''))):
             tcin = tcin.group(1) if tcin else None
 
-        # 优化: 智能等待价格出现后再提取
-        self._wait_for_price_ready(page)
+
         dom_price = self._extract_price_from_dom(page)
 
         desc_node = item_node.get("product_description", {})
@@ -525,12 +571,8 @@ class Step4(BaseStep4):
 
     def fetch_product(self, url, category):
         """Navigate with the configured DrissionPage backend, then parse unchanged template logic."""
-        if self.Tool.browser.config.backend != "drissionpage":
-            raise RuntimeError("Target Step4 requires browser backend='drissionpage'.")
-        page = self.get_page(url)
-        if self.initial_wait:
-            time.sleep(self.initial_wait)
-        return self.process_product(page, url)
+        tab = self.get_tab()
+        return self.process_product(tab, url)
 
 
 __all__ = ["Step4"]

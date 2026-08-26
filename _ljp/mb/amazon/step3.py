@@ -9,6 +9,7 @@ from lxml import etree
 
 from curl_cffi import requests
 
+from _ljp import File
 
 cookies = {
     'session-id': '132-3456321-9266043',
@@ -340,7 +341,7 @@ class YMXStep3(Step4):
         """模拟切换到美国邮编 10001 以获取美元价格"""
         print("--- 正在初始化美国配送环境 (Zip: 10001) ---")
         try:
-            self.Tool.get("https://www.amazon.com/?currency=USD&language=en_US", headers=self.headers, timeout=15)
+            self.Tool.get("https://www.amazon.com/?currency=USD&language=en_US", headers=headers, timeout=15)
             url = "https://www.amazon.com/portal-migration/hz/glow/address-change"
             data = {
                 "locationType": "LOCATION_INPUT",
@@ -425,9 +426,15 @@ class YMXStep3(Step4):
         item_details = {}
         attr_nodes = tree.xpath(
             '//div[@class="a-section a-spacing-none a-padding-none inline-twister-dim-title-value-truncate-expanded"]')
+
+        child_sku_qz = ''
         for i, item in enumerate(attr_nodes, 1):
-            item_details[f"Attribute {i} name"] = item.xpath('string(./span[1])').strip().rstrip(':')
-            item_details[f"Attribute {i} value(s)"] = item.xpath('string(./span[2])').strip()
+            v_name = item.xpath('string(./span[1])').strip().rstrip(':')
+            v_value = item.xpath('string(./span[2])').strip()
+            item_details[f"Attribute {i} name"] = v_name
+            item_details[f"Attribute {i} value(s)"] = v_value
+
+            child_sku_qz += f'_{v_name}_{v_value}'
 
         # 解析图片
         image_list = []
@@ -461,17 +468,26 @@ class YMXStep3(Step4):
             "About_this_item(product.metafields.c_f.about_this_item)": get_node_html('//div[@id="feature-bullets"]'),
         }
 
+
+        Parent = self.ys_dic.get(url,url) if item_details else ""
+        if Parent == url:
+            sku = f"{url}-{child_sku_qz}"
+
+        elif Parent == "":
+            sku = f"{url}"
+        else:
+            sku = url
         # 构建最终行
         result = {
             "Type": "variation" if item_details else "simple",
-            "SKU": f"{url}-variation" if item_details else url,
+            "SKU": sku,
             "Description": "",
             "Name": name,
             "Sale price": price,
             "Regular price": price,
             "Categories": category,
             "Images": self.Tool.config.images_split.join(image_list),
-            "Parent": url if item_details else "",
+            "Parent": Parent,
             "brand": "clarol",
             "Stock": 1000.0,
             "is_upload": 0
@@ -483,6 +499,8 @@ class YMXStep3(Step4):
     def _init(self):
         super()._init()
         self.set_us_location()
+
+        self.ys_dic = self.tool.File.load_json(self.Tool.File.path_add_site('data/变体id映射表.json'))
 
     def fetch_product(self, url, category) -> list[dict]:
         try:

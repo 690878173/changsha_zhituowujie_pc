@@ -113,8 +113,8 @@ class Pc(Step4):
 if __name__ == '__main__':
     pc = Pc(
         tool=Tool,
-        input_file=input_file,
-        output_file=output_file,
+        input_path=input_file,
+        output_path=output_file,
         fail_file=fail_file,
         catch_path=catch_path,
         index_path=index_path,

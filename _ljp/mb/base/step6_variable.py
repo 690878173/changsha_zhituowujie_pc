@@ -23,7 +23,7 @@ class Step6Variable:
         if field != "Images":
             return text.split(",")
         configured = self.Tool.config.images_split
-        separator = configured if configured and configured in text else ","
+        separator = configured if configured else ","
         return text.split(separator)
 
     def _join_unique(self, values, field):
@@ -34,7 +34,13 @@ class Step6Variable:
                 part = part.strip()
                 if part and part not in collected:
                     collected.append(part)
+        if field != "Images":
+            return separator.join(collected)
+
+        configured = self.Tool.config.images_split
+        separator = configured if configured else ","
         return separator.join(collected)
+
 
     def run(self):
         df = pd.read_csv(self.input_file, dtype=str).fillna("")

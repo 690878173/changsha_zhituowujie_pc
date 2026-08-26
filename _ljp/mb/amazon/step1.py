@@ -80,9 +80,13 @@ STEP1 = scrape_amazon_to_custom_json
 
 
 class YMXStep1:
-    def __init__(self,search_keyword,output_path):
+    def __init__(self,search_keyword,output_path,all_num=6,url_mb=None):
         self.search_keyword = search_keyword
         self.output_path = output_path
+
+        self.url_mb = url_mb
+
+        self.all_num = all_num
 
 
 
@@ -92,14 +96,17 @@ class YMXStep1:
         page_obj = ChromiumPage(co)
 
         all_asins = []
-        total_pages = 6
+        total_pages = self.all_num
 
         try:
             for page_num in range(1, total_pages + 1):
                 print(f"正在爬取第 {page_num} 页...")
 
                 # 2. 构造翻页 URL
+                # https://www.amazon.com/s?k=huckberry&i=grocery&page=1&ref=sr_pg_1
                 url = f"https://www.amazon.com/s?k={self.search_keyword}&i=grocery&page={page_num}&ref=sr_pg_{page_num}"
+                if self.url_mb:
+                    url = self.url_mb.format(page_num,page_num)
                 page_obj.get(url)
 
                 # 等待页面加载，并模拟随机滚动
