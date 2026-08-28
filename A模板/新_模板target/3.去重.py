@@ -1,7 +1,7 @@
 from config import Tool
 from _ljp.mb.target import Quchong
 
-input_file = Tool.File.path_add_site(r'res/result.csv')
+input_file = Tool.File.path_add_site(r'res/res.csv')
 output_file= Tool.File.path_add_site(r'res/quchong.csv')
 
 if __name__ == "__main__":

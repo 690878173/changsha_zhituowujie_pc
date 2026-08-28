@@ -9,7 +9,7 @@ from lxml import etree
 
 from curl_cffi import requests
 
-from _ljp import File
+from _ljp import File, HTML
 
 cookies = {
     'session-id': '132-3456321-9266043',
@@ -37,7 +37,7 @@ headers = {
     'ect': '4g',
     'pragma': 'no-cache',
     'priority': 'u=1, i',
-    'referer': 'https://www.amazon.com/dp/B0H32RLCWB?language=en_US&currency=USD&th=1&psc=1',
+    'referer': 'https://www.amazon.com',
     'rtt': '200',
     'sec-ch-device-memory': '16',
     'sec-ch-dpr': '1.5',
@@ -341,7 +341,7 @@ class YMXStep3(Step4):
         """模拟切换到美国邮编 10001 以获取美元价格"""
         print("--- 正在初始化美国配送环境 (Zip: 10001) ---")
         try:
-            self.Tool.get("https://www.amazon.com/?currency=USD&language=en_US", headers=headers, timeout=15)
+            self.Tool.get("https://www.amazon.com/?currency=USD&language=en_US", headers=headers,cookies=cookies, timeout=15)
             url = "https://www.amazon.com/portal-migration/hz/glow/address-change"
             data = {
                 "locationType": "LOCATION_INPUT",
@@ -357,12 +357,13 @@ class YMXStep3(Step4):
                 "x-requested-with": "XMLHttpRequest",
                 "referer": "https://www.amazon.com/"
             })
-            resp = self.Tool.post(url, data=json.dumps(data), headers=ajax_headers, cookies=cookies, timeout=10)
+            resp = self.Tool.post(url, data=json.dumps(data), headers=ajax_headers, cookies={}, timeout=10)
             if resp.status_code == 200 and "10001" in resp.text:
                 print("--- 成功：环境已锁定为美国 (USD) ---")
                 return True
             else:
-                print("--- 失败：环境非美国 10001 ---")
+                print(f"--- 失败：环境非美国 10001 ---,状态码:{resp.status_code},已保存响应结果")
+                self.Tool.HTML.save(resp.text)
         except Exception as e:
             print(f"--- 切换地址异常: {e} ---")
         return False

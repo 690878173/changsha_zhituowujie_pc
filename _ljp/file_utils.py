@@ -241,7 +241,9 @@ class File:
                 prefix=f'.{fp.name}.', suffix='.tmp', delete=False,
             ) as temp:
                 temp_path = Path(temp.name)
-                pd.DataFrame(data).to_csv(temp, index=False, columns=columns)
+                df = pd.DataFrame(data)
+                df = df.replace('\x00', '', regex=True)
+                df.to_csv(temp, index=False, columns=columns)
             os.replace(temp_path, fp)
             return fp
         except (OSError, ValueError, TypeError) as exc:

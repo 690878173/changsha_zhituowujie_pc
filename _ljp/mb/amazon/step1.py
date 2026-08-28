@@ -89,6 +89,13 @@ class YMXStep1:
         self.all_num = all_num
 
 
+    def get_url(self,page_num,search_keyword):
+        url = f"https://www.amazon.com/s?k={self.search_keyword}&i=grocery&page={page_num}&ref=sr_pg_{page_num}"
+        if self.url_mb:
+            url = self.url_mb.format(page_num, page_num)
+        return url
+
+
 
     def run(self):
         co = ChromiumOptions()
@@ -104,9 +111,7 @@ class YMXStep1:
 
                 # 2. 构造翻页 URL
                 # https://www.amazon.com/s?k=huckberry&i=grocery&page=1&ref=sr_pg_1
-                url = f"https://www.amazon.com/s?k={self.search_keyword}&i=grocery&page={page_num}&ref=sr_pg_{page_num}"
-                if self.url_mb:
-                    url = self.url_mb.format(page_num,page_num)
+                url = self.get_url(page_num,self.search_keyword)
                 page_obj.get(url)
 
                 # 等待页面加载，并模拟随机滚动

@@ -30,8 +30,6 @@ class GetDetail(Base):
         self.catch_save_num = catch_save_num or 10
         self._init()
 
-
-
     # ================= 缓存管理（基于 BaseCatch 模型） =================
 
     def _init(self):

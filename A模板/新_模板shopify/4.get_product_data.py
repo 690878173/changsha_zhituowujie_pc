@@ -1,4 +1,7 @@
 import time
+
+from lxml import etree
+
 from config import Tool
 
 input_file = Tool.File.path_add_site('data/detail_url.json')
@@ -59,11 +62,16 @@ if_wp = False
 time_sleep = 7
 
 from _ljp.mb.shopify import Step4
+
+
 class Pc(Step4):
 
-
-    def zdy_zd(self,url):
+    def zdy_zd(self, url):
         '''返回字典格式'''
+        # res = Tool.get(url)
+        # html = etree.HTML(res.text)
+        #
+        # Tool.HTML.save(res.text)
         pass
 
     def fetch_product(self, url, category) -> list:

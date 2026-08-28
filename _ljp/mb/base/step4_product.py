@@ -111,7 +111,7 @@ class Step4(Base):
         """复用同一 url 解析结果，替换分类名称"""
         result = []
         for row in rows:
-            new_row = dict(row)
+            new_row = dict(row).copy()
             new_row['Categories'] = category
             result.append(new_row)
         return result
@@ -279,6 +279,7 @@ class Step4(Base):
         writer_thread.join()
 
         all_rows = list(self._iter_all_product_rows())
+
         self.tool.File.save_csv(all_rows, self.output_ts_file, columns=self.fieldnames)
         clean_rows = self.tool.json_del_url(all_rows)
         self.tool.File.save_csv(clean_rows, self.output_file, columns=self.fieldnames)
@@ -297,4 +298,5 @@ class Step4(Base):
 
         self.Tool.print(f"输出表头: {self.fieldnames or self.tool.File.read_csv(data=clean_rows).columns}")
         self.Tool.print("确认字段是否满足导入需求！")
+
         return all_rows

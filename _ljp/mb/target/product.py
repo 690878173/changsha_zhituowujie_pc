@@ -522,8 +522,8 @@ class Step4(BaseStep4):
             results.append({
                 "Type": "simple", "SKU": parent_sku, "Name": product_name,
                 "Description": html_details,
-                "Label info (product.metafields.c_f.zdy_tabs1)": html_label,
-                "Specifications (product.metafields.c_f.zdy_tabs2)": html_specs,
+                "Label info (product.metafields.c_f.label_info)": html_label,
+                "Specifications (product.metafields.c_f.specifications)": html_specs,
                 "Sale price": price_value, "Regular price": price_value,
                 "Categories": "DefaultCategory", "Tags": "",
                 "Images": ",".join(parent_image_list), "Parent": "",
@@ -552,8 +552,8 @@ class Step4(BaseStep4):
                 row = {
                     "Type": "variation", "SKU": variation_sku, "Name": product_name,
                     "Description": html_details,
-                    "Label info (product.metafields.c_f.zdy_tabs1)": html_label,
-                    "Specifications (product.metafields.c_f.zdy_tabs2)": html_specs,
+                    "Label info (product.metafields.c_f.label_info)": html_label,
+                    "Specifications (product.metafields.c_f.specifications)": html_specs,
                     "Sale price": v_price, "Regular price": v_price,
                     "Categories": "DefaultCategory",
                     "Images": ",".join(v_images), "Parent": parent_sku,
@@ -572,7 +572,12 @@ class Step4(BaseStep4):
     def fetch_product(self, url, category):
         """Navigate with the configured DrissionPage backend, then parse unchanged template logic."""
         tab = self.get_tab()
-        return self.process_product(tab, url)
+        try:
+            ls = self.process_product(tab, url)
+            return ls
+        except Exception as e:
+            print(f'获取产品失败:{e}')
+            return []
 
 
 __all__ = ["Step4"]

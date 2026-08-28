@@ -108,7 +108,7 @@ class Pc(GetDetail):
 
 if __name__ == '__main__':
     pc = Pc(tool=Tool,
-            file_path=file_path,
+            input_path=file_path,
             output_path=save_path,
             catch_path=catch_path,
             index_path=index_path,
