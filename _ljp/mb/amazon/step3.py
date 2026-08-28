@@ -334,8 +334,8 @@ class Crawler:
             with open(self.fail_file, "w", encoding="utf-8") as f:
                 json.dump(self.failures, f, ensure_ascii=False, indent=4)
 
-from _ljp.mb.base import Step4
-class YMXStep3(Step4):
+from _ljp.mb.base import Get_Product
+class YMXStep3(Get_Product):
 
     def set_us_location(self):
         """模拟切换到美国邮编 10001 以获取美元价格"""

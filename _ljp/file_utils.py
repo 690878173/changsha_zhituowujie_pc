@@ -181,8 +181,6 @@ class File:
 
         self.Web = WebPValidator
 
-
-
     @staticmethod
     def create_dir(file_path):
         Path(file_path).parent.mkdir(parents=True, exist_ok=True)

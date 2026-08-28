@@ -3,9 +3,6 @@ from curl_cffi.requests import RequestsError
 import time
 import json
 import random
-
-from _ljp import File
-
 # --- 1. 配置部分 (使用你提供的最新校验数据) ---
 # 注意：_px3 和 accessToken 会过期，建议失效后再次替换
 # UA 已改为 Chrome，与 impersonate="chrome120" 指纹对齐，降低被识别后断连的概率
@@ -155,7 +152,7 @@ def get_target_detail_urls(keyword="doritos", max_pages=9):
 
     return all_buy_urls
 
-class GetDetailStep:
+class GetDetail:
     def __init__(self,tool,output_path,keyword,all_num=9):
         self.Tool = tool
         self.output_path = output_path

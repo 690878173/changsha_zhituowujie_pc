@@ -25,9 +25,6 @@ custom_key = None
 # 'shopify'
 site_type = 'amazon'
 
-# 一键流水线配置。先完成各步骤中的站点解析 TODO，再选择要执行的步骤。
-pipeline_steps = []
-
 
 browser = {
     "enabled": True,

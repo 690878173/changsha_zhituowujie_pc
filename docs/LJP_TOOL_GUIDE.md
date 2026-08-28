@@ -371,7 +371,7 @@ fingerprint rotation, retries, and backoff. It writes a standard mapping for
 so configure `backend='drissionpage'` before running it:
 
 ```python
-from _ljp.mb.target import Step2, Step4, Quchong, Step7, Step8WpToShopify
+from _ljp.mb.target import Step2, Step4, Quchong, Replace_imgs, WpToShopify
 
 Step2(Tool, keyword='zzzquil', max_pages=9).run()
 Step4(Tool, max_threads=3).run()

@@ -7,10 +7,10 @@ import html as html_parser
 
 from DrissionPage import ChromiumPage, ChromiumOptions
 
-from _ljp.mb.base import Step4 as BaseStep4
+from _ljp.mb.base import Get_Product as BaseStep4
 
 
-class Step4(BaseStep4):
+class Get_Product(BaseStep4):
     """Target parser adapted from the template; cache/output are owned by BaseStep4."""
 
 
@@ -580,4 +580,4 @@ class Step4(BaseStep4):
             return []
 
 
-__all__ = ["Step4"]
+__all__ = ["Get_Product"]

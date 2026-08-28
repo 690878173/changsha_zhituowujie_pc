@@ -1,9 +1,18 @@
 """Target direct-API/direct-product crawler mode."""
 
 
-from _ljp.mb.base import Quchong, Step3, Step6Variable, Step7, Step8WpToShopify, Step9Discount, Step10Collection, download_new
-
+from _ljp.mb.base import (Quchong,
+                          Detail_QuChong,
+                          Variable,
+                          Replace_imgs,
+                          WpToShopify,
+                          Shopify_dz,
+                          Collection,
+                          download_new)
+from .detail import GetDetail
+from .product import Get_Product
 __all__ = [
-    "Step3", "Quchong", "Step6Variable", "Step7",
-    "Step8WpToShopify", "Step9Discount", "Step10Collection", "download_new",
+    "Detail_QuChong", "Quchong", "Variable", "Replace_imgs",
+    "WpToShopify", "Shopify_dz", "Collection", "download_new",
+    'GetDetail','Get_Product'
 ]

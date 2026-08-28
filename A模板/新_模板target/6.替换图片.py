@@ -1,11 +1,11 @@
 
 
 from config import Tool
-from _ljp.mb.target import Step7
+from _ljp.mb.target import Replace_imgs
 
-image_url_base = f"https://cdn.zhimatrix.com/{Tool.site}_ljp/images/"
+image_url_base = f"https://cdn.zhimatrix.com/{Tool.site}_target_ljp/images/"
 
-class CdnImageStep(Step7):
+class CdnImageStep(Replace_imgs):
     def build_new_url_base(self):
         return image_url_base
 

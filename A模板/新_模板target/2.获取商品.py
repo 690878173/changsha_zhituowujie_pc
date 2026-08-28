@@ -1,4 +1,4 @@
-from _ljp.mb.target.product import Step4
+from _ljp.mb.target import Get_Product
 
 from config import Tool
 input_path = Tool.File.path_add_site('data/2.json')
@@ -9,10 +9,10 @@ index_path = Tool.File.path_add_site('hc/3/index.json')
 output_ts_file = Tool.File.path_add_site('res/ts_res.csv')
 if __name__ == '__main__':
 
-    Step4(input_path=input_path,
-          output_path=output_path,
-          fail_file=fail_file,
-          catch_path=catch_path,
-          index_path=index_path,
-          output_ts_file=output_ts_file,
-          tool=Tool).run()
+    Get_Product(input_path=input_path,
+                output_path=output_path,
+                fail_file=fail_file,
+                catch_path=catch_path,
+                index_path=index_path,
+                output_ts_file=output_ts_file,
+                tool=Tool).run()

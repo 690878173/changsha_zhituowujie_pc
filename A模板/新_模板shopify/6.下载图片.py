@@ -1,1 +1,0 @@
-from _ljp.mb.base import download_new

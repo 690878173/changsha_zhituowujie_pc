@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+
 import pandas as pd
 from tqdm import tqdm
 
@@ -31,12 +33,20 @@ def split_shopify_csv_large(input_file, output_dir, products_per_file=1350, chun
     num_batches = (total_products + products_per_file - 1) // products_per_file
     print(f"📦 将生成 {num_batches} 个文件，每个文件约 {products_per_file} 个产品。")
 
+    input_path = Path(input_file)
+    input_file_name = input_path.name.replace('.csv', '')
+    output_dir = input_path.parent / '分割'
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     # 开始逐批导出
     for batch_index in range(num_batches):
         start = batch_index * products_per_file
         end = min((batch_index + 1) * products_per_file, total_products)
         batch_handles = set(handles[start:end])
         output_file = os.path.join(output_dir, f"products_part_{batch_index + 1}.csv")
+
+        output_file = output_dir / f'{input_file_name}_{batch_index + 1}.csv'
 
         print(f"\n🧩 正在生成第 {batch_index + 1}/{num_batches} 个文件: {output_file}")
         with open(output_file, 'w', encoding='utf-8-sig', newline='') as f_out:
@@ -54,8 +64,8 @@ def split_shopify_csv_large(input_file, output_dir, products_per_file=1350, chun
 
 if __name__ == "__main__":
     # ======== 配置部分 ========
-    input_csv = r"J:\changsha\8-17到8-22\asics_自建\res\asics_70%off_ljp.csv"  # 输入文件路径
-    output_folder = r"J:\changsha\8-17到8-22\asics_自建\res\分割"  # 输出文件夹
+    input_csv = r"J:\changsha\8-24到8-29\reef_shopify\res\reef_shopify_70%off_ljp.csv"  # 输入文件路径
+    output_folder = r"J:\changsha\8-24到8-29\reef_shopify\res\分割"  # 输出文件夹
     products_per_file = 318  # 每个文件的产品数
     chunksize = 100000  # 每次分块读取行数
     # =========================

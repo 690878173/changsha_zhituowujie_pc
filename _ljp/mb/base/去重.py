@@ -1,7 +1,6 @@
-"""步骤5：按 SKU 去重合并分类模板
+"""按 SKU 去重合并分类模板
 
 通用流程：读取 result.csv -> 按 SKU 分组合并 Categories -> 恢复原顺序 -> 输出 quchong.csv
-该步骤两个模板逻辑一致，完全通用，无需子类覆写。
 """
 import pandas as pd
 

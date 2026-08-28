@@ -17,24 +17,18 @@ from .browser import (
     Browser, BrowserBackend, BrowserConfig, BrowserFetchResponse,
     DrissionPageBackend, PlaywrightBackend,
 )
+from .分割csv import split_shopify_csv_large
 
 
-# 为了兼容旧代码，保持 _Simple / _Variation 作为别名
-_Simple = ProductSimple
-_Variation = ProductVariation
+Tool = Base_tool(config=Tool_config(base_url='',site='',site_type='',zk=1))
 
-# Fc 是 File 的缩写别名（部分老项目使用）
-Fc = File
-
-# zs 装饰器快捷引用
-zs = SimTool.zs
 
 __all__ = [
     "Tool_config", "SimTool", "Session", "FailedResponse", "HTML", "URL", "File",
     "Product", "ProductSimple", "ProductVariation", "Base_tool",
     "Browser", "BrowserBackend", "BrowserConfig", "BrowserFetchResponse",
-    "DrissionPageBackend", "PlaywrightBackend", "zs",
-    "_Simple", "_Variation", "Fc",
+    "DrissionPageBackend", "PlaywrightBackend",
     "_DEFAULT_HEADERS", "_DEFAULT_COOKIES",
     "_CUSTOM_KEY", "_IMAGE_SPLIT", "_MAX_RETRY", "_TIMEOUT", "_IMPERSONATE_TARGET",
+    'split_shopify_csv_large',"Tool"
 ]

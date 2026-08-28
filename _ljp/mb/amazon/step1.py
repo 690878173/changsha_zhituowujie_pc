@@ -80,22 +80,14 @@ STEP1 = scrape_amazon_to_custom_json
 
 
 class YMXStep1:
-    def __init__(self,search_keyword,output_path,all_num=6,url_mb=None):
+    def __init__(self,search_keyword,output_path,all_num=6):
         self.search_keyword = search_keyword
         self.output_path = output_path
-
-        self.url_mb = url_mb
-
         self.all_num = all_num
-
 
     def get_url(self,page_num,search_keyword):
         url = f"https://www.amazon.com/s?k={self.search_keyword}&i=grocery&page={page_num}&ref=sr_pg_{page_num}"
-        if self.url_mb:
-            url = self.url_mb.format(page_num, page_num)
         return url
-
-
 
     def run(self):
         co = ChromiumOptions()

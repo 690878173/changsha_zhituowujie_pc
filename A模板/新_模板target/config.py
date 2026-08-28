@@ -1,18 +1,15 @@
-"""Target site configuration. Change values here; do not edit the runner."""
-
 from _ljp import Base_tool, Tool_config
 
-
-base_url = "https://www.target.com"
-site = "target"
-zk = 0.8
-site_type = None
+base_url =
+site =
+zk = 0.3
+site_type = 'target'
 # Common request defaults used by all steps.
 headers = {}
 cookies = {}
 max_retry = 3
 time_out = 30
-images_split = ","
+images_split = None
 custom_key = None
 
 browser = {
@@ -27,9 +24,6 @@ browser = {
         "auto_port": True,
     },
 }
-
-# Controls only the runner's order. Step-specific settings live in numbered scripts.
-pipeline_steps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 config = Tool_config(
     base_url=base_url,

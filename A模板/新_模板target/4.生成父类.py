@@ -1,5 +1,5 @@
 from config import Tool
-from _ljp.mb.target import Step6Variable
+from _ljp.mb.target import Variable
 
 # Parent-row field policy.
 merge_fields = ["Images", "Attribute 1 value(s)", "Attribute 2 value(s)"]
@@ -12,4 +12,4 @@ output_file = Tool.File.path_add_site('fwq/variable.csv')
 
 
 if __name__ == "__main__":
-    Step6Variable(Tool, merge_fields=merge_fields, description_fields=description_fields).run()
+    Variable(Tool, merge_fields=merge_fields, description_fields=description_fields).run()

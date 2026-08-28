@@ -9,9 +9,9 @@ time_out = None
 
 # NOTE =========
 
-base_url = ''
-site = 'example'
-zk = 0.8
+base_url =
+site =
+zk = 0.3
 
 # NOTE =========
 
@@ -23,9 +23,6 @@ custom_key = None
 
 # 'shopify'
 site_type = 'shopify'
-
-# 一键流水线配置。先完成各步骤中的站点解析 TODO，再选择要执行的步骤。
-pipeline_steps = [8, 9, 10]
 
 
 from _ljp.base_tool import Base_tool,Tool_config
