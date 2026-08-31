@@ -22,8 +22,7 @@ if __name__ == '__main__':
     Pc(tool=Tool,input_path=csv_input_path,output_path=csv_output_path).run()
 
     # wb = Tool.File.Web(csv_output_path)
-    # df = wb.run()
-    #
-    # Tool.File.save_csv(data=df, path='fail/失败图片链接.csv')
+    # wb.run('fail/失败图片链接.csv')
+
 
 

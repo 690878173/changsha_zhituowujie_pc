@@ -14,3 +14,6 @@ csv_output_path = Tool.File.path_add_site(r'res/picture.csv')
 
 if __name__ == "__main__":
     CdnImageStep(Tool,input_path=csv_input_path,output_path=csv_output_path).run()
+
+    # wb = Tool.File.Web(csv_output_path)
+    # wb.run('fail/失败图片链接.csv')

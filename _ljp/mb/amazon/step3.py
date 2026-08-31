@@ -502,6 +502,11 @@ class YMXStep3(Get_Product):
         self.set_us_location()
 
         self.ys_dic = self.tool.File.load_json(self.Tool.File.path_add_site('data/变体id映射表.json'))
+        self.set_not_parent()
+
+    def set_not_parent(self,no=False):
+        if no:
+            self.yc_dic = {}
 
     def fetch_product(self, url, category) -> list[dict]:
         try:

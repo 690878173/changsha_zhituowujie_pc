@@ -38,6 +38,7 @@ class Replace_imgs:
         text = str(image_urls)
         if images_split not in text and ",http" in text:
             images_split = ","
+            print(f'替换为,分割')
 
         new_urls = []
         for url in text.split(images_split):

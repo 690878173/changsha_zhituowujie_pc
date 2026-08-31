@@ -3,6 +3,7 @@
 通用流程：加载 URL 任务 -> 多线程请求解析 -> 缓存 -> 输出 result.csv
 专有逻辑（各站点不同）交由子类实现 fetch_product：
 """
+from _ljp import HTML
 from _ljp.mb.base import Get_Product as Step
 
 
@@ -42,6 +43,7 @@ class Get_Product(Step):
         woo_product['Type'] = 'variable' if has_options else 'simple'
         woo_product['SKU'] = shopify_product.get('handle', '')
         woo_product['Description'] = shopify_product.get('body_html', '')
+        woo_product['Description'] = self.tool.HTML.clean_product_desc_str(woo_product['Description'])
         woo_product['Name'] = shopify_product.get('title', '')
 
         # 填写是否有库存

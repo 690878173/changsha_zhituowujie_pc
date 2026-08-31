@@ -31,20 +31,21 @@ def process_csv(merge_fields=None, desc_like_fields=None):
     df = pd.read_csv(input_file)
     df.columns = df.columns.str.strip()
 
-    # 1. 记录原始顺序（关键步骤！）
-    # 给每一行一个身份证号，0, 1, 2, 3...
-    df["_original_sort_index"] = df.index
-
     required_cols = ["Type", "Parent", "SKU"]
     for col in required_cols:
         if col not in df.columns:
             raise KeyError(f"CSV 文件缺少必要列: {col}，实际列名: {df.columns.tolist()}")
 
-    # 分离数据
-    variation_df = df[df["Type"] == "variation"].copy()
-    other_df = df[df["Type"] != "variation"].copy()
 
-    result_rows = []
+    # 记录原始行顺序（排序索引）
+    df["_original_order"] = df.index
+
+    # 分离变体行与其他行（simple 类型）
+    is_variation = df["Type"] == "variation"
+    variation_df = df[is_variation].copy()
+    other_df = df[~is_variation].copy()
+
+
 
     group_fields = ["Parent"]
     if "Categories" in df.columns:
@@ -53,79 +54,75 @@ def process_csv(merge_fields=None, desc_like_fields=None):
         group_fields.append("Categories")
 
     # 保持分组时的顺序性
-    variation_group = variation_df.groupby(group_fields, sort=False, dropna=False)
+    grouped = variation_df.groupby(group_fields, sort=False, dropna=False)
 
-    for group_key, group in variation_group:
-        parent_sku = group["Parent"].iloc[0]
+    result_rows = []
 
-        # 获取该组中最小的索引值（即第一行变体的位置）
-        min_index = group["_original_sort_index"].min()
+    for _, group in grouped:
+        # 组内第一个变体作为父商品模板
+        first_row = group.iloc[0]
+        parent_sku = first_row["Parent"]
+        min_order = group["_original_order"].min()
 
-        # ========== 1. 构建 variable (父商品) 行 ==========
-        variable_row = group.iloc[0].copy()
-        variable_row["Type"] = "variable"
-        variable_row["SKU"] = parent_sku
-        variable_row["Parent"] = ""  # 记得清空父商品的 Parent
+        # ----- 构建父商品（variable）行 -----
+        parent_row = first_row.copy()
+        parent_row["Type"] = "variable"
+        parent_row["SKU"] = parent_sku
+        parent_row["Parent"] = ""  # 清空父商品的 Parent
 
-        # 核心技巧：让父商品排在第一行变体的前面一点点
-        # 比如第一行变体是 10，父商品就是 9.5
-        variable_row["_original_sort_index"] = min_index - 0.5
+        # 父商品排在所属变体组的最前面（比最小索引小0.5）
+        parent_row["_original_order"] = min_order - 0.5
 
-        # merge_fields 多值合并
+        # 合并 merge_fields：去重合并
         for field in merge_fields:
             if field not in df.columns:
                 continue
-            all_values = []
-            # 过滤空值并转换成字符串
-            raw_series = group[field].dropna().astype(str)
-            for v in raw_series:
-                split_values = [x.strip() for x in v.split(",") if x.strip()]
-                for val in split_values:
-                    if val not in all_values:
-                        all_values.append(val)
-            variable_row[field] = ",".join(all_values)
+            # 确定分隔符（图片用特殊分隔符，其他用逗号）
+            separator = Tool.config.images_split if field == "Images" else ","
+            # 收集该组所有变体的该字段值（去重）
+            unique_vals = set()
+            for val in group[field].dropna().astype(str):
+                for item in val.split(separator):
+                    item = item.strip()
+                    if item:
+                        unique_vals.add(item)
+            parent_row[field] = separator.join(sorted(unique_vals))  # 排序保证一致性
 
-        # desc_like_fields：只保留第一条
+        # 处理 desc_like_fields：只取第一个变体的值
         for field in desc_like_fields:
             if field in df.columns:
-                first_value = group[field].dropna()
-                variable_row[field] = first_value.iloc[0] if len(first_value) > 0 else ""
+                first_val = group[field].dropna()
+                parent_row[field] = first_val.iloc[0] if not first_val.empty else ""
 
-        result_rows.append(variable_row.to_dict())
+        result_rows.append(parent_row.to_dict())
 
-        # ========== 2. 处理 variation (子变体) 行 ==========
+        # ----- 处理每个子变体（variation）行 -----
         for _, row in group.iterrows():
-            row_dict = row.to_dict()
-
-            # merge_fields 取第一条值
+            child_row = row.copy()
+            # merge_fields 只保留第一个值（按分隔符分割）
             for field in merge_fields:
-                if field in df.columns and pd.notna(row_dict[field]):
-                    row_dict[field] = str(row_dict[field]).split(",")[0].strip()
-
+                if field in df.columns and pd.notna(child_row[field]):
+                    separator = Tool.config.images_split if field == "Images" else ","
+                    parts = str(child_row[field]).split(separator)
+                    child_row[field] = parts[0].strip() if parts else ""
             # desc_like_fields 清空
             for field in desc_like_fields:
                 if field in df.columns:
-                    row_dict[field] = ""
+                    child_row[field] = ""
+            # 子变体保持原顺序索引
+            result_rows.append(child_row.to_dict())
 
-            # 子变体保持原有的 _original_sort_index 不变
-            result_rows.append(row_dict)
-
-    # 3. 合并所有数据
-    # 将生成的父子数据 + 之前分离出去的 simple 数据合并
+    # 合并所有行（父商品+子变体+其他行）
     final_df = pd.DataFrame(result_rows)
     if not other_df.empty:
         final_df = pd.concat([final_df, other_df], ignore_index=True)
 
-    # 4. 核心步骤：按照 _original_sort_index 排序
-    # 这样 Simple 商品会回到原来的位置，Variable 父商品会插在它的子变体正上方
-    final_df = final_df.sort_values(by="_original_sort_index")
-
-    # 5. 删除辅助排序列
-    final_df = final_df.drop(columns=["_original_sort_index"])
+    # 按 _original_order 排序，恢复原始顺序
+    final_df = final_df.sort_values("_original_order").drop(columns=["_original_order"])
 
     # 保存
     final_df.to_csv(output_file, index=False, encoding="utf-8-sig")
-    print(f"✅ 处理完成，数据顺序已还原，结果保存到 {output_file}")
+    print(f"✅ 处理完成，结果保存到 {output_file}")
 
 
 def main():

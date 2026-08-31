@@ -60,3 +60,12 @@ class URL:
 
     def del_par_and_add_site(self, url):
         return self.add_site(self.del_par(url))
+
+    @staticmethod
+    def get_params_str(params):
+        sl = '?'
+        for k, v in params.items():
+            sl += f'{k}={v}&'
+
+
+        return sl[:-1]

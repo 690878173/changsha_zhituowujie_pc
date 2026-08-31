@@ -30,9 +30,9 @@ fieldnames = None
 
 max_threads = 2
 
-from _ljp.mb.zj import Step3
+from _ljp.mb.zj import Get_Product
 
-class Pc(Step3):
+class Pc(Get_Product):
 
 
     def fetch_product(self, url, category):

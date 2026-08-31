@@ -8,7 +8,7 @@ input_file = Tool.File.path_add_site('data/detail_url.json')
 output_file = Tool.File.path_add_site('res/result.csv')
 output_ts_file = Tool.File.path_add_site('res/ts_res.csv')
 
-fail_file = Tool.File.path_add_site('dail/4.json')
+fail_file = Tool.File.path_add_site('fail/4.json')
 # NOTE 缓存策略
 index_path = Tool.File.path_add_site('hc/4/index.json')
 catch_path = Tool.File.path_add_site('hc/4/catch.json')

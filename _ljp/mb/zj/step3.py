@@ -1,4 +1,4 @@
-from _ljp.mb.base.step4_product import Step4 as Step3
+from _ljp.mb.base.step_get_product import Get_Product
 
 
-__all__ = ['Step3']
+__all__ = ['Get_Product']

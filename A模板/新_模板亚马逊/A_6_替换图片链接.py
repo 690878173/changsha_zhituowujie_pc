@@ -14,7 +14,5 @@ class CdnImageStep(Replace_imgs):
 if __name__ == "__main__":
     CdnImageStep(Tool, input_path=input_path,output_path=output_path).run()
 
-    # wb = Tool.File.Web(output_path)
-    # df = wb.run()
-    #
-    # Tool.File.save_csv(data=df, path='fail/失败图片链接.csv')
+    # wb = Tool.File.Web(csv_output_path)
+    # wb.run('fail/失败图片链接.csv')

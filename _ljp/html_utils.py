@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -39,6 +40,48 @@ class HTML:
         self.base_url = config.base_url
 
     # ── 静态工具方法 ──────────────────────────────────
+    @staticmethod
+    def extract_js_object(text, var_name='window.menuData'):
+        """
+        从 JavaScript 代码中提取指定变量赋值的对象（支持嵌套大括号）
+        返回解析后的 Python 字典，若失败则返回 None
+        """
+        # 1. 定位变量赋值位置
+        pattern = re.compile(rf'{re.escape(var_name)}\s*=\s*')
+        match = pattern.search(text)
+        if not match:
+            return None
+
+        start = match.end()  # 赋值号之后的位置
+
+        # 2. 从 start 开始查找第一个 '{'
+        brace_start = text.find('{', start)
+        if brace_start == -1:
+            return None
+
+        # 3. 括号计数，找到匹配的 '}'
+        count = 0
+        for i in range(brace_start, len(text)):
+            ch = text[i]
+            if ch == '{':
+                count += 1
+            elif ch == '}':
+                count -= 1
+                if count == 0:
+                    json_str = text[brace_start:i + 1]
+                    # 4. 解析为 JSON
+                    try:
+                        return json.loads(json_str)
+                    except json.JSONDecodeError:
+                        # 如果包含尾部逗号等非标准语法，回退到 json5
+                        try:
+                            import json5
+                            return json5.loads(json_str)
+                        except ImportError:
+                            # 如果未安装 json5，可以尝试清理尾部逗号后再试
+                            # 这里简单返回 None
+                            return None
+        return None
 
     @staticmethod
     def drop_script(html: str) -> str:

@@ -167,8 +167,17 @@ class WebPValidator:
                         failed_urls.append(url)
         return failed_urls
 
-    def run(self,verbose = True):
-        return self.verify(verbose)
+    def run(self,save_path,verbose = True, only_failed: bool = True):
+        df_all = self.verify(verbose)
+        if only_failed:
+            df_failed = df_all[df_all["验证状态"] == "存在失败"]
+
+        else:
+            df_failed = df_all
+        if len(df_failed) > 0:
+            df_failed.to_csv(save_path, index=False)
+
+
 
 
 class File:
