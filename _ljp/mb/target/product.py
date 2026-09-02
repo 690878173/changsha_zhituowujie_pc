@@ -27,8 +27,8 @@ class Get_Product(BaseStep4):
         self.num_threads = num_threads  # 并行标签页数量
 
 
-        browser = self._create_browser()
-        self.tab_ls = [browser.new_tab() for i in range(self.max_threads)]
+        self.browser = self._create_browser()
+        self.tab_ls = [self.browser.new_tab() for i in range(self.max_threads)]
 
         from itertools import cycle
         cycle_iter = cycle(self.tab_ls)
@@ -526,7 +526,7 @@ class Get_Product(BaseStep4):
                 "Specifications (product.metafields.c_f.specifications)": html_specs,
                 "Sale price": price_value, "Regular price": price_value,
                 "Categories": "DefaultCategory", "Tags": "",
-                "Images": ",".join(parent_image_list), "Parent": "",
+                "Images": self.Tool.config.images_split.join(parent_image_list), "Parent": "",
                 "brand": brand_name, "Stock": 1000.00, "is_upload": 0
             })
         else:
@@ -556,7 +556,7 @@ class Get_Product(BaseStep4):
                     "Specifications (product.metafields.c_f.specifications)": html_specs,
                     "Sale price": v_price, "Regular price": v_price,
                     "Categories": "DefaultCategory",
-                    "Images": ",".join(v_images), "Parent": parent_sku,
+                    "Images": self.Tool.config.images_split.join(v_images), "Parent": parent_sku,
                     "brand": brand_name, "Stock": 1000.00, "is_upload": 0
                 }
                 if len(props_items) > 0:
@@ -578,6 +578,19 @@ class Get_Product(BaseStep4):
         except Exception as e:
             print(f'获取产品失败:{e}')
             return []
+
+
+    def close(self):
+        for tab in self.tab_ls:
+            tab.close()
+        self.browser.close()
+
+
+    def run(self):
+        super().run()
+        self.close()
+
+
 
 
 __all__ = ["Get_Product"]

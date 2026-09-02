@@ -157,6 +157,13 @@ class HTML:
             f.write(HTML.drop_script(res_text))
 
     @staticmethod
+    def save_handle(res_text,handle):
+        target = f'html/{handle}'
+        if '.html' not in target:
+            target +='.html'
+        HTML.save(res_text,target)
+
+    @staticmethod
     def save_raw(res_text, file_path=None):
         """Save HTML exactly as received, including executable script tags."""
         target = file_path or "1.html"

@@ -4,6 +4,33 @@ from config import base_url,Tool
 
 save_path = Tool.File.path_add_site('data/ml.json')
 
+def clean_text(values):
+    return ' '.join(' '.join(values).split())
+
+
+def check_url(url):
+    # 由具体站点覆盖,默认原路返回
+    for i in []:
+        if i in url:
+            return None
+    if url in [Tool.URL.base_url]:
+        return None
+    return url
+
+
+def add_node(nodes, name, url='', children=None):
+    name = clean_text([name])
+    if not name or name in nodes:
+        return
+
+    children = children or {}
+    url = Tool.URL.add_site(url)
+    url = check_url(url)
+    if url:
+
+        nodes[name] = {'url': url, 'child': children}
+
+
 
 @Tool.zs('数据结构:{title:{url:xxx,child:{title:url}}')
 def f1(url_dic):
@@ -15,7 +42,7 @@ def f1(url_dic):
     html = etree.HTML(res.text)
 
     ml1 = html.xpath('//div[@class="mega-content"]//div[@class="menu-item top-level"]')
-    header_node = ml1
+    header_node = []
 
 
     for node in header_node:
@@ -23,9 +50,8 @@ def f1(url_dic):
         c_node = node.xpath('./div[@class="xxxx"]')
         _name = ''
         _url = url
-        _url = Tool.URL.add_site(_url)
 
-        url_dic[_name] = {'url':_url,'child':{}}
+        add_node(url_dic,_name,_url,c_node)
 
         childs = []
 
@@ -58,9 +84,6 @@ def f3(dic,childs):
         _name = c_tx
         _url = c_url
         _url = Tool.URL.add_site(_url)
-
-        if 'collections' not in _url:
-            continue
 
         dic[_name] = {'url': _url, 'child': {}}
 

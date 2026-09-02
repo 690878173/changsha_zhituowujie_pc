@@ -14,3 +14,12 @@ from _ljp.mb.zj import Shopify_dz
 
 if __name__ == '__main__':
     Shopify_dz(Tool, input_path, output_path).run()
+
+    # from _ljp import split_shopify_csv_large
+    #
+    # products_per_file = 600  # 每个文件的产品数
+    # chunksize = 100000  # 每次分块读取行数
+    #
+    # split_shopify_csv_large(input_path=output_path,
+    #                         products_per_file=products_per_file,
+    #                         chunksize=chunksize)

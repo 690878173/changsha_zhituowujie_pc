@@ -50,7 +50,7 @@ can provide completion for `Tool.xxx`. The supplied external-template
 
 ### Paths and Files
 
-`Tool.File.path_add_site('data/ml.json')` prefixes the filename with the configured site and creates parent directories. `load_json`, `save_json`, and `save_csv` also apply this site-prefix rule. Keep using these helpers instead of raw file I/O for pipeline files.
+`Tool.File.path_add_site('data/ml.json')` prefixes the filename with the configured site and creates parent directories. `save_json` and `save_csv` apply the same prefix internally; `load_json` expects the path supplied by the caller (template code normally passes the result of `path_add_site`). `read_csv(path=...)` applies the prefix itself. Keep using these helpers instead of raw file I/O for pipeline files.
 
 `Tool.HTML.save(html)` comments out script tags in a debug HTML snapshot. Use `Tool.HTML.save_raw(html)` only when a parser or diagnosis needs the original script contents preserved.
 
@@ -404,14 +404,17 @@ Handle collision tracking spans every chunk in one run.
 
 ## Cache Rules
 
-The shared cache models are `DetailCatch` and `DetailIndex` in `mb/modal.py`.
+The shared cache models are `Catch` and `Index` in `_ljp/mb/model.py`
+(`DetailCatch`/`DetailIndex` are legacy names used by older documentation).
 
-- `DetailCatch`: `category -> task_id -> {'url': url}`.
-- `DetailIndex`: `url -> task_id -> cached_data`.
+- `Catch`: `category -> task_id -> {'url': url}`.
+- `Index`: `url -> task_id -> cached_data`.
 - Step2 index values are page metadata dictionaries containing `data`, `next_url`, and `end`.
 - Step4 index values are normalized product-row lists.
-- Step4 writes its cache only after an index result or category-task mapping changes. A
-  run served entirely by existing cache entries does not rewrite the cache files.
+- Step4 marks the cache as changed when it adds an index result or a new
+  category-task mapping. The writer flushes after `catch_save_num` changes and
+  also performs a final flush when the run ends, so a cache-only run may still
+  rewrite the JSON files even though no new product was fetched.
 
 Do not add a parallel cache dictionary or raw cache-file format in a site Step. Use the template cache APIs and let `run()` save them.
 
@@ -429,8 +432,294 @@ Do not add a parallel cache dictionary or raw cache-file format in a site Step. 
 | Need | Read only when needed |
 | --- | --- |
 | Tool setup, session, lifecycle | `_ljp/config.py`, `_ljp/base_tool.py`, `_ljp/session.py` |
-| Browser implementation failure | `_ljp/browser.py` |
+| Browser implementation failure | `_ljp/browser/browser.py`, `_ljp/browser/playwright.py`, `_ljp/browser/drission.py` |
 | File naming or persistence issue | `_ljp/file_utils.py` |
 | Product row shape issue | `_ljp/product.py` |
-| Step2 pagination/cache behavior | `_ljp/mb/base/step2.py`, `_ljp/mb/modal.py` |
-| Step4 threading/product cache behavior | `_ljp/mb/base/step4.py`, `_ljp/mb/modal.py` |
+| Step2/detail pagination/cache behavior | `_ljp/mb/base/step_get_detail.py`, `_ljp/mb/model.py` |
+| Step4/product threading/cache behavior | `_ljp/mb/base/step_get_product.py`, `_ljp/mb/model.py` |
+
+## AI Contract: Decide Before Reading Source
+
+Use this table to choose the smallest relevant surface. A site Step should
+normally contain only request parameters, selectors/endpoints, and parsing.
+
+| Task | Start here | Do not start with |
+| --- | --- | --- |
+| Add or repair a category crawler | `GetDetail.fetch_page` and `PageModel` | browser internals |
+| Add or repair product parsing | `Get_Product.fetch_product` and `Product.Simple/Variation` | cache JSON files |
+| Change retry behavior | `Tool_config` (`max_retry`, `retry_statuses`, `retry_backoff`) | Step worker threads |
+| Change output columns | `fieldnames`, `Product.to_dic()`, `WpToShopify.EXTRA_META_COLUMNS` | CSV post-processing |
+| Force a fresh crawl | Step `flush=True` | deleting cache files manually |
+| Re-run only temporary failures | inspect `fail/*.json`, leave `flush=False` | clearing all caches |
+| Change browser engine | `config.py` `browser.backend` | replacing page calls in shared code |
+| Change image CDN naming | subclass `Replace_imgs.build_new_url_base` | editing hash logic |
+
+Public import locations are the stable contract:
+
+```python
+from _ljp.mb.shopify import GetDetail, Get_Product, Replace_imgs, WpToShopify
+from _ljp.mb.target import GetDetail, Get_Product, Quchong, Variable
+from _ljp.mb.amazon import YMXStep1, YMXStep2, YMXStep3
+```
+
+`_ljp.mb.base.step_get_detail.GetDetail` is the category/detail URL base and
+`_ljp.mb.base.step_get_product.Get_Product` is the product-detail base. Some
+site packages expose these under local names such as `Step2` or `Step4`; the
+hook signatures below are authoritative.
+
+## Configuration And Lifecycle
+
+The recommended site-local `config.py` has three layers:
+
+```python
+from _ljp import Base_tool, Tool_config
+
+config = Tool_config(
+    base_url='https://shop.example',
+    site='shop.example',       # stored as the first label, e.g. ``shop``
+    site_type='shopify',       # used by File.dz_path()/fl_path()
+    zk=0.8,                    # sale price = compare-at price * zk
+    headers={}, cookies={},
+    browser={'enabled': False},
+)
+Tool: Base_tool = Base_tool(config)
+```
+
+`Tool_config` deep-copies mappings at construction. Later changes to the
+original `headers`, `cookies`, or `browser` dictionaries do not affect the
+Tool; mutate `Tool.config` (before the first browser request) if a run must
+change settings. Validation rejects non-positive `max_retry`/`time_out`, a
+`zk` outside `0..1`, invalid retry status codes, and invalid browser numeric
+settings.
+
+Every Step should use the same Tool instance and close it exactly once. The
+context-manager form is safe for scripts:
+
+```python
+with Base_tool(config) as Tool:
+    Pc(Tool, ...).run()
+```
+
+`Tool.close()` closes all thread-owned HTTP sessions and browser resources.
+Do not pass a browser page or a mutable HTTP session between threads. The
+facades are thread-local; each Step4 worker creates/uses its own resources.
+
+## Public Helper Reference
+
+### File
+
+| Method | Contract |
+| --- | --- |
+| `path_add_site(path)` | Adds `<site>_` to the filename, creates parent directories, returns a `Path`. |
+| `load_json(path, default=..., strict=False)` | Missing/invalid JSON returns `{}` (or a deep-copied `default`); `strict=True` re-raises parse/OS errors. |
+| `save_json(data, path)` | Site-prefixes the path and atomically replaces the destination; returns the resolved `Path`. |
+| `save_csv(data, path, columns=None)` | Builds a DataFrame, removes NUL bytes, writes UTF-8-SIG atomically, returns `Path`. |
+| `read_csv(data=..., path=...)` | Exactly one of in-memory `data` or site-prefixed `path`; returns a DataFrame. |
+| `json_ls_del(rows, target='url')` | Deep-copies row dictionaries and removes the internal field (normally `url`). |
+| `dz_path()` / `fl_path()` | `res/<site_type>_<N>%off_ljp.csv` and `res/<site_type>_col_ljp.csv`, where `N=(1-zk)*100`. |
+
+Do not mix raw paths and already-prefixed paths casually. The helpers are
+designed to be called with logical paths such as `data/detail_url.json`.
+Passing a `Path` returned by a helper back into another helper is supported
+when its filename already starts with the site prefix, but logical paths are
+clearer and avoid accidental double-prefixes.
+
+### URL
+
+`Tool.URL.add_site('/products/x')` joins against `base_url`; use
+`URL.site_add(base, url)` for a one-off base. `get_base_domain(url)` returns
+scheme plus host, `get_domain(url)` returns host, and `get_handle(url)` returns
+the last path component without the trailing slash. `del_par(url)` removes
+the query string while preserving the fragment. `get_params_str(params)` is a
+simple query-string formatter and does not URL-encode values.
+
+### Small `Tool` Utilities
+
+| Method | Contract |
+| --- | --- |
+| `Tool.to_ml_data(tree)` | Flattens nested `{url, child}` menu data to `{path: url}`; input must be a dictionary. |
+| `Tool.to_ml_json(tree, path)` | Removes the configured `custom_key`, flattens with `to_ml_data`, and saves JSON. |
+| `Tool.clean_price(value)` | Stringifies and removes `$`, `/ea`, and `/EA`. |
+| `Tool.sort_data(mapping)` | Returns a new dict sorted by integer-convertible keys. |
+| `Tool.make_counter(n)` | Returns a closure for test limits; `None` means unlimited, exhaustion returns `0`. |
+| `Tool.zs(...)` | Legacy decorator used by template scripts for lightweight status/debug output. |
+
+`Tool.get()` and `Tool.post()` return the underlying curl response for an HTTP
+response (with `.status_code`, `.text`, `.content`, `.headers`, `.json()`).
+Only transport failures after all retries use `FailedResponse`; it has
+`status_code == 0`, `.ok == False`, and the original exception in `.error`.
+
+### HTML
+
+`HTML.get_text(node)` extracts descendant text; `get_a_text_and_url(a)` returns
+`(text, href)` and expects one lxml element, not a list. `extract_js_object()`
+parses a balanced JavaScript object assigned to a variable (JSON first,
+`json5` fallback). `script_text()` is a simpler regex extractor for an
+`... = {...};` block.
+
+For descriptions, use `clean_product_desc_str(value)` or
+`clean_text_fields_df(df)`. The cleaner drops script/style/form/iframe/SVG
+content, removes raw HTTP URLs and attributes, unwraps unsupported tags, and
+keeps only `p`, `br`, lists, and basic emphasis tags. It is intentionally not
+a general HTML sanitizer: parse site HTML first, then clean only fields that
+will be exported as rich text.
+
+### Product
+
+`Tool.Product.Simple(...)` creates a `ProductSimple`; `Variation(...)` creates
+a `ProductVariation`. Both return dictionaries through `to_dic()` with the
+WooCommerce-style columns below:
+
+| Field group | Keys / behavior |
+| --- | --- |
+| identity | `Type` (`simple`/`variation`), `SKU`, `Name`, `Parent`, `Categories`, `Tags` |
+| pricing | `Sale price`, `Regular price` (price strings lose `$` and `/ea`) |
+| content | `Description`, `Images` (absolute URLs joined by `config.images_split`) |
+| inventory | `Stock` (defaults to `1000.0`; explicit `0` is preserved), `is_upload` |
+| source | internal `url` (removed by `json_del_url` before final CSV) |
+| custom | `**exc`, renamed to `name(product.metafields.c_f.name)` and cleaned when the field is text-like |
+
+Variation attributes are written as `Attribute 1 name`,
+`Attribute 1 value(s)`, etc. If `sku=None`, a deterministic suffix based on
+attribute values is appended to the variation name. `imgs` must be a list (a
+string is accepted and converted to a one-item list); relative image links
+are resolved against `base_url`. If an original URL contains a comma, set a
+different `images_split` before creating products.
+
+## Step Data Contracts
+
+### Detail URL collection (`GetDetail`)
+
+Input JSON is a mapping of category name to one URL or a list of URLs:
+
+```json
+{"Shoes": ["https://shop/collections/shoes"], "Sale": ["https://shop/sale"]}
+```
+
+Implement `fetch_page(page, params) -> (product_urls, next_url)`. `page` is a
+mutable `PageModel` with `url`, `next_url`, `page` (1-based), `extra`,
+`status`, and `is_next`. Use `page.set_end()` for a confirmed empty/terminal
+page and `page.set_fail()` for a temporary failure. A failure is deliberately
+not cached. `build_params(page)` must return only values that affect the
+response; its result is included in the MD5 page-cache key. `before_request`
+is the place to compute stable per-category values such as an API base URL.
+The template does not convert arbitrary exceptions from `fetch_page` into a
+retry state; catch expected request/parser errors in the hook, log them, call
+`page.set_fail()`, and return an empty page result. Let programming errors
+surface during development.
+
+Output is again `{category: [detail_url, ...]}`. URLs are deduplicated per
+page and again while aggregating categories. The final aggregation follows
+category/page traversal order; do not rely on the exact order within a single
+page because the low-level page cache currently uses set-based deduplication.
+`skip_input_url_ls` skips source category URLs; `skip_output_url_ls` removes
+detail URLs from both page output and final aggregation. `ts_num` limits the
+number of input categories, not the number of products.
+
+The two caches are JSON dictionaries:
+
+```text
+catch_path: {category: {page_id: {"url": page_url}}}
+index_path: {page_url: {page_id: {"data": [...], "next_url": ..., "end": bool}}}
+```
+
+### Product collection (`Get_Product`)
+
+Input is the same category mapping. `fetch_product(url, category)` may return
+one dictionary/object or a list; objects must expose `to_dic()`. `None`, an
+empty list, or a list containing no dictionaries is a failed parse and is not
+cached. Exceptions are caught by the worker and written to `fail_file` as
+`{category: [url, ...]}`.
+
+Step4 writes two CSVs:
+
+| File | Contents |
+| --- | --- |
+| `output_ts_file` | Test/raw output including internal `url`, useful for diagnosis |
+| `output_file` | Final output with `url` removed; `Categories` overwritten with the task category |
+
+One URL has one shared product parse in `index_path`, even when it appears in
+multiple categories. Each category receives a cloned row with its own
+`Categories` value. `max_threads` controls request workers; URL locks prevent
+the same URL from being fetched concurrently. `catch_save_num` controls how
+many cache changes are buffered before a disk flush; the writer also flushes
+once at normal completion, including for a cache-only run.
+
+The Step4 index shape is `url -> task_id -> [normalized product-row dicts]`.
+The current worker generates the shared product-cache ID from the URL (the
+model also accepts an optional category argument for compatibility). Category
+membership is stored separately in `catch`. Treat task IDs as opaque and use
+`catch`/`index` APIs rather than constructing IDs manually.
+
+## Standard Post-processing Steps
+
+These classes are pure file transforms; they do not issue site requests.
+
+| Class | Input -> output | Important behavior |
+| --- | --- | --- |
+| `Detail_QuChong` | category mapping -> URL list JSON | global first-seen URL dedupe |
+| `Quchong` | `result.csv` -> `quchong.csv` | group by `SKU`, merge `Categories`, preserve original row order; warns on other field conflicts (blank SKUs form one group) |
+| `Variable` | variation rows -> `variable.csv` | inserts one `variable` parent before each family; parent SKU is child `Parent`; when present, `Categories` participates in grouping; configurable `merge_fields`/`description_fields` |
+| `Replace_imgs` | CSV -> CSV | MD5 URL basename + `.webp`; skips failed URLs and already-converted CDN URLs; removes parent families with no image |
+| `WpToShopify` | WooCommerce CSV -> Shopify CSV | streaming conversion; source families must be ordered `variable` then its `variation` rows |
+| `Shopify_dz` | Shopify CSV -> discount CSV | removes every handle whose compare-at price is numeric zero, then computes `Variant Price = Variant Compare At Price * Tool.zk`, rounded to 2 decimals |
+| `Collection` | discount CSV -> collection CSV(s) | reads `Tags`, case-insensitive dedupe, writes at most 99 smart-collection rows per file |
+| `IMG_download_ljp` | CSV `Images` -> local WebP files | reads `[PATHS]`, `[PROXY]`, `[REQUEST]` from `config.ini`; failed URLs go to `failed_log` |
+
+`Replace_imgs` hashes the complete original URL, so query-string changes create
+different filenames. Override only `build_new_url_base()` or
+`load_failed_images()` for site policy. `WpToShopify` keeps the final variable
+family across pandas chunk boundaries; do not sort or independently split its
+input by arbitrary rows.
+
+## Ready-made Template Pipelines
+
+The maintained templates live under `A模板/`:
+
+| Template | Sequence | Typical artifacts |
+| --- | --- | --- |
+| `新_模板shopify` | A_1 catalog -> A_2 detail URLs -> A_3 products -> A_4 SKU dedupe -> A_5 images -> A_6 Shopify -> A_7 discount -> A_8 collections | `data/ml.json`, `data/detail_url.json`, `res/result.csv`, `fwq/quchong.csv`, `res/picture.csv` |
+| `新_模板自建` | A_1 -> A_2 -> A_3 -> A_4 -> A_5 variable -> A_6 images -> A_7 Shopify -> A_8 discount -> A_9 collections | same, with `fwq/variable.csv` |
+| `新_模板target` | detail -> products -> dedupe -> parent -> download -> replace -> Shopify -> discount -> collections | browser backend must be `drissionpage` |
+| `新_模板亚马逊` | ASIN search -> variation expansion -> products -> dedupe -> parent -> replace -> Shopify -> discount -> collections | `data/amazon_asins.json`, `data/detail_url.json` |
+
+Run scripts from the directory that contains the script, using the project
+virtual-environment interpreter (per repository instructions):
+
+```powershell
+Set-Location 'J:\changsha\A模板\新_模板shopify'
+& 'J:\changsha\.venv\Scripts\python.exe' 'A_1_获取目录.py'
+```
+
+For a configured one-click runner, `Base_tool.run(BASE_DIR, STEPS)` executes
+each script with `cwd=BASE_DIR`, stops on the first non-zero exit code, and
+uses the current interpreter. Browser-enabled templates require the relevant
+browser dependency and a working Chromium/DrissionPage installation.
+
+## Failure And Debugging Playbook
+
+1. Confirm the logical input path and its site prefix. A missing JSON file is
+   treated as empty data by default, so inspect the printed path before
+   assuming a crawler returned zero records.
+2. Check HTTP `status_code`. `404` is returned immediately. A transport-only
+   failure is `FailedResponse(status_code=0, error=...)`; do not call
+   `.json()` on it.
+3. For an empty Step4 result, inspect `fail/*.json`, the test CSV, and the
+   parser return value. Returning `[]` means retry next run; it is not a valid
+   “no product” cache entry.
+4. For repeated Step2 pages, verify `build_params()` changes with the page
+   and that `next_url` eventually becomes `None`. A truthy self-link will
+   intentionally continue until the template warning threshold.
+5. For missing custom columns, check `fieldnames=None` and
+   `WpToShopify.EXTRA_META_COLUMNS`; product dictionaries can contain fields
+   that a downstream explicit column list drops.
+6. For image failures, inspect the downloader's `failed_log` and use
+   `Replace_imgs.load_failed_images()` to prevent exporting known-bad URLs.
+7. For access-denied pages, call `Tool.browser.restart_context()` in the Step,
+   then retry with the same native backend API. Do not pass a Playwright page
+   to DrissionPage code or vice versa.
+
+When source inspection is unavoidable, read the narrow module from the map
+above, then update this guide if the confirmed public contract changed. Keep
+site-specific credentials, endpoint headers, and selectors in the site Step or
+`config.py`; never add them to shared `_ljp` defaults.

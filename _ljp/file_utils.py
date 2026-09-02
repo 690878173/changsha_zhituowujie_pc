@@ -88,68 +88,53 @@ class WebPValidator:
                 results.append(await coro)
             return results
 
-    def verify(self, verbose: bool = True) -> pd.DataFrame:
-        """
-        执行验证，返回带验证结果的 DataFrame。
-
-        Args:
-            verbose: 是否打印进度和失败摘要，默认 True
-
-        Returns:
-            包含原始数据 + '验证状态' + '失败详情' 列的 DataFrame
-        """
-        # 提取所有 URL 任务
-        tasks = []
+    def verify(self, verbose=True):
+        # 构建 URL 到行索引列表的映射
+        url_to_rows = {}
         for idx, row in self.df.iterrows():
             cell = row.get(self.column_name)
             if pd.isna(cell) or not cell:
                 continue
             urls = [u.strip() for u in str(cell).split(self.separator) if u.strip()]
             for url in urls:
-                tasks.append((idx, url))
+                if url not in url_to_rows:
+                    url_to_rows[url] = []
+                url_to_rows[url].append(idx)
 
+        # 生成唯一 URL 列表
+        unique_urls = list(url_to_rows.keys())
         if verbose:
-            print(f"总行数: {len(self.df)}，提取出 {len(tasks)} 个独立 URL")
+            print(f"原始 URL 数: {sum(len(v) for v in url_to_rows.values())}，去重后: {len(unique_urls)}")
 
-        if not tasks:
-            self.df["验证状态"] = "无URL"
-            self.df["失败详情"] = ""
-            return self.df
+        # 构建任务（仅对唯一 URL 进行验证）
+        tasks = [(0, url) for url in unique_urls]  # 行索引占位，实际用不到
 
-        # 执行异步验证
-        start = time.time()
+        # 执行异步验证，返回结果列表 [(0, url, valid, msg), ...]
         raw_results = asyncio.run(self._run_async_verify(tasks))
-        elapsed = time.time() - start
-        if verbose:
-            print(f"验证完成，耗时 {elapsed:.2f} 秒")
 
-        # 组织结果
+        # 将结果映射到每个 URL
+        url_result = {url: (valid, msg) for _, url, valid, msg in raw_results}
+
+        # 回写到 DataFrame
         self.df["验证状态"] = ""
         self.df["失败详情"] = ""
-        temp_map = {idx: {} for idx in self.df.index}
-
-        for row_idx, url, valid, msg in raw_results:
-            temp_map[row_idx][url] = (valid, msg)
-
-        for idx, url_results in temp_map.items():
-            if not url_results:
+        for idx, row in self.df.iterrows():
+            # 获取该行的 URL 列表
+            urls = [u.strip() for u in str(row.get(self.column_name)).split(self.separator) if u.strip()]
+            if not urls:
                 self.df.at[idx, "验证状态"] = "无URL"
                 continue
-            all_ok = all(v for v, _ in url_results.values())
+            all_ok = True
+            fail_msgs = []
+            for url in urls:
+                if url and str(url) != 'nan' and not pd.isna(url):
+                    valid, msg = url_result.get(url, (False, "未验证"))
+                    if not valid:
+                        all_ok = False
+                        fail_msgs.append(f"{url}: {msg}")
             self.df.at[idx, "验证状态"] = "全部通过" if all_ok else "存在失败"
-            fail_msgs = [f"{url}: {msg}" for url, (v, msg) in url_results.items() if not v]
             self.df.at[idx, "失败详情"] = " | ".join(fail_msgs) if fail_msgs else "全部成功"
 
-        # 打印失败摘要
-        if verbose:
-            failed = self.df[self.df["验证状态"] == "存在失败"]
-            if len(failed) > 0:
-                print(f"\n❌ 发现 {len(failed)} 行存在失败 URL：")
-                print(failed[[self.column_name, "验证状态", "失败详情"]])
-            else:
-                print("\n✅ 所有 URL 全部通过验证！")
-
-        self.results = self.df
         return self.df
 
     def get_failed_urls(self) -> List[str]:
@@ -175,7 +160,15 @@ class WebPValidator:
         else:
             df_failed = df_all
         if len(df_failed) > 0:
+            print(f'存在失败链接,数量:{len(df_failed)}')
+            with pd.option_context('display.max_rows', None,  # 显示所有行
+                                   'display.max_columns', None,
+                                   'display.max_colwidth', None):  # 显示所有列
+                print(df_failed[['SKU', '失败详情']])
+            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
             df_failed.to_csv(save_path, index=False)
+        else:
+            print(f'全部url通过验证')
 
 
 
