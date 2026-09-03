@@ -458,9 +458,21 @@ Public import locations are the stable contract:
 
 ```python
 from _ljp.mb.shopify import GetDetail, Get_Product, Replace_imgs, WpToShopify
+from _ljp.mb.mg_shopify import GetDetail, Get_Product, MgShopifySite
 from _ljp.mb.target import GetDetail, Get_Product, Quchong, Variable
 from _ljp.mb.amazon import YMXStep1, YMXStep2, YMXStep3
 ```
+
+`_ljp.mb.mg_shopify` is the Storefront GraphQL variant for the magic Shopify
+template. Its `GetDetail` handles public-token discovery, endpoint validation,
+collection cursor pagination, and normal Step2 cache integration. Its
+`Get_Product` follows the final product-page handle, requests GraphQL product
+data, and reuses the magic Shopify variation conversion. Site subclasses
+implement the `MgShopifySite.storefront_settings()` interface and return site-only values such as
+`storefront_token`, `store_domain`, `api_version`, country, language, page size,
+and request delay. These values do not belong in `Tool.config`. Override
+`zdy_zd(url, html_text)` for HTML-only custom fields or
+`product_query()`/`collection_query()` for an exceptional API shape.
 
 `_ljp.mb.base.step_get_detail.GetDetail` is the category/detail URL base and
 `_ljp.mb.base.step_get_product.Get_Product` is the product-detail base. Some
@@ -679,6 +691,7 @@ The maintained templates live under `A模板/`:
 | Template | Sequence | Typical artifacts |
 | --- | --- | --- |
 | `新_模板shopify` | A_1 catalog -> A_2 detail URLs -> A_3 products -> A_4 SKU dedupe -> A_5 images -> A_6 Shopify -> A_7 discount -> A_8 collections | `data/ml.json`, `data/detail_url.json`, `res/result.csv`, `fwq/quchong.csv`, `res/picture.csv` |
+| `新_模板魔改shopify` | A_1 catalog -> A_2 Storefront GraphQL URLs -> A_3 Storefront GraphQL products -> A_4 SKU dedupe -> A_5 images -> A_6 Shopify -> A_7 discount -> A_8 collections | Uses `_ljp.mb.mg_shopify`; keep only site GraphQL settings and site-only field hooks in A_2/A_3 |
 | `新_模板自建` | A_1 -> A_2 -> A_3 -> A_4 -> A_5 variable -> A_6 images -> A_7 Shopify -> A_8 discount -> A_9 collections | same, with `fwq/variable.csv` |
 | `新_模板target` | detail -> products -> dedupe -> parent -> download -> replace -> Shopify -> discount -> collections | browser backend must be `drissionpage` |
 | `新_模板亚马逊` | ASIN search -> variation expansion -> products -> dedupe -> parent -> replace -> Shopify -> discount -> collections | `data/amazon_asins.json`, `data/detail_url.json` |
