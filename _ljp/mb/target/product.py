@@ -4,6 +4,9 @@ import json
 import re
 import time
 import html as html_parser
+import threading
+from pathlib import Path
+from queue import Queue
 
 from DrissionPage import ChromiumPage, ChromiumOptions
 
@@ -13,10 +16,126 @@ from _ljp.mb.base import Get_Product as BaseStep4
 class Get_Product(BaseStep4):
     """Target parser adapted from the template; cache/output are owned by BaseStep4."""
 
+    def __init__(
+        self,
+        *args,
+        variant_cache_path=None,
+        variant_cache_save_num=1,
+        save_html=True,
+        html_save_dir=None,
+        **kwargs,
+    ):
+        """Create a Target detail collector.
+
+        ``variant_cache_path`` stores prices that have already been read for a
+        partially processed product.  It is intentionally separate from the
+        Step4 product cache: a product cache entry is only valid after every
+        expected variation has been assembled into product rows.
+        """
+        self.variant_cache_path = variant_cache_path
+        self.variant_cache_save_num = max(1, int(variant_cache_save_num))
+        self.save_html = bool(save_html)
+        self.html_save_dir = Path(html_save_dir) if html_save_dir else Path("html")
+        self._variant_cache = {}
+        self._variant_cache_changes_since_save = 0
+        self._variant_cache_lock = threading.Lock()
+        self._manual_verification_lock = threading.Lock()
+        self._manual_verification_active = threading.Event()
+        super().__init__(*args, **kwargs)
 
     def _init(self):
         super()._init()
+        self._init_variant_cache()
         self.init()
+
+    def _init_variant_cache(self):
+        if self.variant_cache_path is None:
+            index_file = Path(self.index_path)
+            self.variant_cache_path = index_file.with_name(
+                f"{index_file.stem}_variants{index_file.suffix or '.json'}"
+            )
+        self._variant_cache = self.Tool.File.load_json(
+            self.variant_cache_path, default={}
+        ) or {}
+        if not isinstance(self._variant_cache, dict):
+            self._variant_cache = {}
+
+    @staticmethod
+    def _has_price(value):
+        return value is not None and bool(str(value).strip())
+
+    def _cached_variant_data(self, url, expected_tcins):
+        """Return cached purchasable and out-of-stock variant states."""
+        with self._variant_cache_lock:
+            entry = self._variant_cache.get(url, {})
+            variants = entry.get("variants", {}) if isinstance(entry, dict) else {}
+            return {
+                str(tcin): {
+                    "price": data.get("price", ""),
+                    **({"stock": 0} if data.get("stock") == 0 else {}),
+                }
+                for tcin, data in variants.items()
+                if str(tcin) in expected_tcins
+                and isinstance(data, dict)
+                and (
+                    self._has_price(data.get("price"))
+                    or data.get("stock") == 0
+                )
+            }
+
+    def _save_variant_cache_locked(self):
+        self.Tool.File.save_json(self._variant_cache, self.variant_cache_path)
+        self._variant_cache_changes_since_save = 0
+
+    def _cache_variant_price(self, url, tcin, price, stock=None):
+        """Persist each successful or known-out-of-stock variant immediately."""
+        if not self._has_price(price) and stock != 0:
+            return
+        data = {"price": price}
+        if stock is not None:
+            data["stock"] = stock
+        with self._variant_cache_lock:
+            entry = self._variant_cache.setdefault(url, {"variants": {}})
+            variants = entry.setdefault("variants", {})
+            if variants.get(str(tcin)) == data:
+                return
+            variants[str(tcin)] = data
+            self._variant_cache_changes_since_save += 1
+            if self._variant_cache_changes_since_save >= self.variant_cache_save_num:
+                self._save_variant_cache_locked()
+
+    def should_extract_all_variants(self, product_node, variations_dict):
+        """Whether Target hierarchy entries should become variation rows.
+
+        Subclasses can return ``False`` for sites whose response contains a
+        non-purchasable hierarchy.  In that case the current product is
+        exported as one simple product instead of treating the hierarchy as
+        incomplete variations.
+        """
+        return True
+
+    @staticmethod
+    def _tcin_from_url(url):
+        match = re.search(r"/A-(\d+)", str(url))
+        return match.group(1) if match else "unknown"
+
+    def _save_debug_html(self, page, parent_tcin, product_tcin):
+        """Save the live DOM, including scripts, for failed-parse diagnosis."""
+        if not self.save_html:
+            return
+        parent_id = re.sub(r"[^0-9A-Za-z_-]", "_", str(parent_tcin or "unknown"))
+        product_id = re.sub(r"[^0-9A-Za-z_-]", "_", str(product_tcin or "unknown"))
+        html_path = self.html_save_dir / parent_id / f"{product_id}.html"
+        try:
+            html = page.html
+            if not html:
+                html = page.run_js("return document.documentElement.outerHTML;")
+            if not isinstance(html, str) or not html.strip():
+                raise ValueError("页面 HTML 为空")
+            self.Tool.HTML.save_raw(html, html_path)
+            print(f"    [HTML] 已保存调试快照: {html_path}")
+        except Exception as exc:
+            self.Tool.print(f"保存调试 HTML 失败: {exc}", color="yellow")
 
     def init(self,proxy="127.0.0.1:7897", headless=False, wait_time=15,
                  num_threads=3, max_wait_price=12):
@@ -28,14 +147,11 @@ class Get_Product(BaseStep4):
 
 
         self.browser = self._create_browser()
-        self.tab_ls = [self.browser.new_tab() for i in range(self.max_threads)]
-
-        from itertools import cycle
-        cycle_iter = cycle(self.tab_ls)
-
-        def get_next():
-            return next(cycle_iter)
-        self.get_tab = get_next
+        self.tab_ls = [self.browser.new_tab() for _ in range(self.max_threads)]
+        self._available_tabs = Queue()
+        for tab in self.tab_ls:
+            self._available_tabs.put(tab)
+        self._worker_tab = threading.local()
 
     def _create_browser(self):
         """创建并配置 DrissionPage 浏览器"""
@@ -47,12 +163,29 @@ class Get_Product(BaseStep4):
         co.set_argument("--no-first-run")
         co.set_argument("--no-default-browser-check")
         co.set_argument("--disable-infobars")
-        co.set_user_agent(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/131.0.0.0 Safari/537.36"
-        )
+        # Keep Chromium's native UA and Client Hints aligned. A hard-coded UA
+        # version can otherwise disagree with the installed browser version.
         return ChromiumPage(co)
+
+    def get_tab(self):
+        """Lease one tab to each request worker until that worker exits."""
+        tab = getattr(self._worker_tab, "tab", None)
+        if tab is None:
+            tab = self._available_tabs.get()
+            self._worker_tab.tab = tab
+        return tab
+
+    def _release_worker_tab(self):
+        tab = getattr(self._worker_tab, "tab", None)
+        if tab is not None:
+            self._worker_tab.tab = None
+            self._available_tabs.put(tab)
+
+    def request_worker(self):
+        try:
+            super().request_worker()
+        finally:
+            self._release_worker_tab()
 
 
 
@@ -100,6 +233,68 @@ class Get_Product(BaseStep4):
             time.sleep(interval)
             elapsed += interval
         return False
+
+    def _verification_signal(self, page):
+        """Return a visible verification signal, without treating normal copy as one."""
+        try:
+            details = page.run_js("""
+                return JSON.stringify({
+                    title: document.title || '',
+                    text: (document.body && document.body.innerText || '').slice(0, 4000),
+                    url: location.href || ''
+                });
+            """)
+            if not details:
+                return None
+            page_details = json.loads(details)
+            text = " ".join(str(value) for value in page_details.values()).lower()
+        except Exception:
+            return None
+
+        signals = (
+            "verify you are human",
+            "verify that you are human",
+            "are you a human",
+            "security check",
+            "unusual traffic",
+            "access denied",
+            "press and hold",
+            "recaptcha",
+            "hcaptcha",
+            "cf-chl",
+        )
+        return next((signal for signal in signals if signal in text), None)
+
+    def _wait_for_manual_verification(self, page, url):
+        """Pause all newly started Target tasks until the operator clears a challenge."""
+        while self._manual_verification_active.is_set():
+            time.sleep(0.2)
+
+        signal = self._verification_signal(page)
+        if not signal:
+            return
+
+        with self._manual_verification_lock:
+            signal = self._verification_signal(page)
+            if not signal:
+                return
+            self._manual_verification_active.set()
+            try:
+                while signal:
+                    self.Tool.print(
+                        f"检测到浏览器验证（{signal}），已暂停新任务：{url}",
+                        color="yellow",
+                    )
+                    try:
+                        input("请在打开的浏览器中完成验证，然后按 Enter 继续：")
+                    except EOFError as exc:
+                        raise RuntimeError("需要人工完成浏览器验证，但当前运行没有交互式控制台。") from exc
+                    time.sleep(1)
+                    signal = self._verification_signal(page)
+                    if signal:
+                        self.Tool.print("验证页仍未通过，请完成验证后再次按 Enter。", color="yellow")
+            finally:
+                self._manual_verification_active.clear()
 
     def _extract_price_from_dom(self, page, retry=2):
         """
@@ -153,7 +348,7 @@ class Get_Product(BaseStep4):
         except (ValueError, TypeError):
             return price_str
 
-    def _click_variant_chip(self, page, variant_value):
+    def _click_variant_chip(self, page, variant_value, option_name=None):
         """点击指定变体值的 chip 按钮"""
         try:
             escaped_value = (
@@ -164,10 +359,24 @@ class Get_Product(BaseStep4):
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")
             )
+            escaped_name = (
+                str(option_name or "")
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace('"', '\\"')
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+            )
             clicked = page.run_js(f"""
                 var chips = document.querySelectorAll('button[class*="ndsChip"]');
                 for (var chip of chips) {{
-                    if (chip.innerText.trim() === '{escaped_value}' && !chip.disabled) {{
+                var aria = (chip.getAttribute('aria-label') || '').trim();
+                var parts = aria.split(',').map(function(part) {{ return part.trim(); }});
+                var chipName = parts[0] || '';
+                    var chipValue = (parts[1] || chip.innerText.trim())
+                        .replace(/[ ]*-[ ]*out of stock[ ]*$/i, '').trim();
+                    if (chipValue === '{escaped_value}' &&
+                        (!'{escaped_name}' || chipName === '{escaped_name}')) {{
                         chip.click();
                         return true;
                     }}
@@ -179,18 +388,27 @@ class Get_Product(BaseStep4):
             return False
 
     def _get_variant_chip_values(self, page):
-        """获取页面上所有变体 chip 按钮的值和选中状态"""
+        """Read Target chips from accessibility labels, including image swatches."""
         try:
             result = page.run_js("""
                 var chips = document.querySelectorAll('button[class*="ndsChip"]');
                 var result = [];
                 chips.forEach(function(btn) {
                     var classes = btn.className || '';
-                    var isSelected = classes.includes('styles_selected') || classes.includes('styles_sel');
+                    var aria = (btn.getAttribute('aria-label') || '').trim();
+                    var parts = aria.split(',').map(function(part) { return part.trim(); });
+                    var rawValue = parts[1] || btn.innerText.trim();
+                    var isOutOfStock = /[ ]*-[ ]*out of stock[ ]*$/i.test(rawValue) ||
+                        /styles_unavailable/.test(classes);
+                    var isSelected = classes.includes('styles_selected') ||
+                        classes.includes('styles_sel') ||
+                        /,\\s*selected$/i.test(aria);
                     result.push({
-                        text: btn.innerText.trim(),
+                        text: rawValue.replace(/[ ]*-[ ]*out of stock[ ]*$/i, '').trim(),
+                        name: parts[0] || '',
                         selected: isSelected,
-                        disabled: btn.disabled
+                        disabled: btn.disabled,
+                        out_of_stock: isOutOfStock
                     });
                 });
                 return JSON.stringify(result);
@@ -212,91 +430,134 @@ class Get_Product(BaseStep4):
             pass
         return None
 
-    # ==================== 优化2: 变体等待从8秒降到5秒 ====================
-    def _extract_variant_data_from_dom(self, page, variations_dict):
-        """
-        逐个点击变体 chip，提取每个变体的价格。
-        优化: 变体等待从8秒降到5秒，价格提取用retry=1（不重试）。
-        """
-        variant_data = {}
+    def _extract_variant_data_from_dom(
+        self, page, url, variations_dict, cached_data=None, parent_price=""
+    ):
+        """Select each variant's full option combination, then read its price."""
+        all_tcins = {str(tcin) for tcin in variations_dict}
+        variant_data = dict(cached_data or {})
+        if all_tcins.issubset(variant_data):
+            print(f"    复用 {len(variant_data)} 个已缓存变体价格")
+            return variant_data
 
         chip_values = self._get_variant_chip_values(page)
         if not chip_values:
             return variant_data
 
-        print(f"    找到 {len(chip_values)} 个变体 chip: {[c['text'] for c in chip_values]}")
+        chip_display = [
+            f"{chip.get('name', '')}:{chip['text']}" for chip in chip_values
+        ]
+        print(f"    找到 {len(chip_values)} 个变体 chip: {chip_display}")
 
-        def normalize(s):
-            return str(s).strip().lower().replace(' ', '').replace('\t', '')
+        def normalize(value):
+            return re.sub(r"\s+", "", str(value).strip().lower())
 
-        combo_to_tcin = {}
-        for v_tcin, props_dict in variations_dict.items():
-            combo = frozenset(normalize(v) for v in props_dict.values())
-            combo_to_tcin[combo] = str(v_tcin)
-
-        all_var_values_normalized = set()
-        for props in variations_dict.values():
-            for v in props.values():
-                all_var_values_normalized.add(normalize(v))
-
-        all_tcins = set(str(k) for k in variations_dict.keys())
-        processed_tcins = set()
-        previous_price = None
-
-        def extract_current_state():
-            current_chips = self._get_variant_chip_values(page)
-            selected_texts = frozenset(
-                normalize(c['text']) for c in current_chips if c['selected']
+        def is_option(chip, name, value):
+            return (
+                normalize(chip.get("name", "")) == normalize(name)
+                and normalize(chip.get("text", "")) == normalize(value)
             )
-            matched_tcin = combo_to_tcin.get(selected_texts)
-            if not matched_tcin:
-                url_tcin = self._get_current_tcin_from_url(page)
-                if url_tcin and url_tcin in all_tcins:
-                    matched_tcin = url_tcin
 
-            if matched_tcin and matched_tcin not in processed_tcins:
-                # 优化: retry=1 不重试，因为已经等待过价格变化了
-                price = self._extract_price_from_dom(page, retry=1)
-                if price:
-                    variant_data[matched_tcin] = {"price": price}
-                    processed_tcins.add(matched_tcin)
-                    print(f"    [变体] tcin={matched_tcin}, 价格=${price}")
-                    return True
-                else:
-                    print(f"    [警告] tcin={matched_tcin} 价格提取失败")
-                    processed_tcins.add(matched_tcin)
-            return False
-
-        extract_current_state()
-        previous_price = self._extract_price_from_dom(page, retry=1)
-
-        for chip in chip_values:
-            chip_text = chip['text']
-            if chip['disabled'] or chip['selected']:
-                continue
-            if normalize(chip_text) not in all_var_values_normalized:
-                continue
-
-            clicked = self._click_variant_chip(page, chip_text)
-            if not clicked:
-                continue
-
-            # 优化: 从8秒降到5秒，每0.5秒检查一次
-            new_price = None
-            for _ in range(10):  # 10 * 0.5 = 5秒
+        def wait_until_selected(name, value):
+            current_chips = []
+            for _ in range(10):
                 time.sleep(0.5)
-                new_price = self._extract_price_from_dom(page, retry=1)
-                if new_price and new_price != previous_price:
-                    break
+                current_chips = self._get_variant_chip_values(page)
+                if any(
+                    chip["selected"] and is_option(chip, name, value)
+                    for chip in current_chips
+                ):
+                    return current_chips
+            return current_chips
 
-            extract_current_state()
-            previous_price = new_price or previous_price
+        def select_variant(props_dict):
+            # Color first: Target often enables valid size chips only after its
+            # corresponding color swatch has been selected.
+            desired_options = list(props_dict.items())
+            desired_options.sort(
+                key=lambda item: normalize(item[0]) not in {"color", "colour"}
+            )
+            is_out_of_stock = False
+            for option_name, option_value in desired_options:
+                current_chips = self._get_variant_chip_values(page)
+                matches = [
+                    chip for chip in current_chips
+                    if is_option(chip, option_name, option_value)
+                ]
+                if not matches:
+                    return False, f"页面没有 {option_name}={option_value}", False
+                target_chip = matches[0]
+                if target_chip["selected"]:
+                    is_out_of_stock = is_out_of_stock or bool(
+                        target_chip.get("out_of_stock") or target_chip.get("disabled")
+                    )
+                    continue
+                is_out_of_stock = is_out_of_stock or bool(
+                    target_chip.get("out_of_stock") or target_chip.get("disabled")
+                )
 
-        unmatched = all_tcins - processed_tcins
+                clicked = self._click_variant_chip(
+                    page, target_chip["text"], target_chip.get("name")
+                )
+                if not clicked:
+                    return False, f"无法点击 {option_name}={option_value}", is_out_of_stock
+                self._wait_for_manual_verification(page, url)
+                current_chips = wait_until_selected(option_name, option_value)
+                if not any(
+                    chip["selected"] and is_option(chip, option_name, option_value)
+                    for chip in current_chips
+                ):
+                    return False, f"点击后未选中 {option_name}={option_value}", is_out_of_stock
+            return True, "", is_out_of_stock
+
+        selection_failures = {}
+        for v_tcin, props_dict in variations_dict.items():
+            v_tcin = str(v_tcin)
+            if v_tcin in variant_data:
+                continue
+            selected, reason, is_out_of_stock = select_variant(props_dict)
+            if not selected and not is_out_of_stock:
+                selection_failures[v_tcin] = reason
+                continue
+
+            price = self._extract_price_from_dom(page, retry=1)
+            if not price and is_out_of_stock:
+                price = parent_price
+            if not price:
+                selection_failures[v_tcin] = "选中后未提取到价格"
+                continue
+            price = self._format_price(price)
+            variant_data[v_tcin] = {
+                "price": price,
+                **({"stock": 0} if is_out_of_stock else {}),
+            }
+            self._cache_variant_price(
+                url, v_tcin, price, stock=0 if is_out_of_stock else None
+            )
+            status = "[缺货变体]" if is_out_of_stock else "[变体]"
+            print(f"    {status} tcin={v_tcin}, 价格=${price}")
+
+        unmatched = all_tcins - set(variant_data)
         if unmatched:
             print(f"    [警告] {len(unmatched)} 个变体未匹配: {unmatched}")
+            for v_tcin in sorted(unmatched):
+                if v_tcin in selection_failures:
+                    print(f"      {v_tcin}: {selection_failures[v_tcin]}")
 
         return variant_data
+
+    def _validate_variant_data(self, variations_dict, variant_data):
+        missing_tcins = sorted(
+            str(tcin)
+            for tcin in variations_dict
+            if not self._has_price(variant_data.get(str(tcin), {}).get("price"))
+            and variant_data.get(str(tcin), {}).get("stock") != 0
+        )
+        if missing_tcins:
+            raise ValueError(
+                "变体提取不完整，未写入商品缓存；缺少价格的 TCIN: "
+                + ", ".join(missing_tcins)
+            )
 
     def _extract_next_data(self, page):
         """从页面提取 __NEXT_DATA__ JSON"""
@@ -381,11 +642,17 @@ class Get_Product(BaseStep4):
     def process_product(self, page, url):
         """处理单个商品页面，返回 CSV 行列表"""
 
+        request_tcin = self._tcin_from_url(url)
+        self._wait_for_manual_verification(page, url)
         page.get(url)
+        self._wait_for_manual_verification(page, url)
         # 优化: 先等一个较短的基础时间让页面框架加载
         time.sleep(3)
+        self._wait_for_manual_verification(page, url)
         # 智能等待价格元素出现（最多 max_wait_price 秒，通常3-5秒就好）
         self._wait_for_price_ready(page)
+        self._wait_for_manual_verification(page, url)
+        self._save_debug_html(page, request_tcin, request_tcin)
         next_data = self._extract_next_data(page)
         product_node = self._extract_product_node_from_next_data(next_data)
         if not product_node:
@@ -518,7 +785,10 @@ class Get_Product(BaseStep4):
         results = []
         parent_sku = str(tcin) if tcin else url.split('/')[-1]
 
-        if not variations_dict:
+        extract_all_variants = bool(variations_dict) and self.should_extract_all_variants(
+            product_node, variations_dict
+        )
+        if not extract_all_variants:
             results.append({
                 "Type": "simple", "SKU": parent_sku, "Name": product_name,
                 "Description": html_details,
@@ -531,7 +801,12 @@ class Get_Product(BaseStep4):
             })
         else:
             print(f"    开始提取变体数据 (共 {len(variations_dict)} 个变体)...")
-            variant_data = self._extract_variant_data_from_dom(page, variations_dict)
+            expected_tcins = {str(tcin) for tcin in variations_dict}
+            cached_data = self._cached_variant_data(url, expected_tcins)
+            variant_data = self._extract_variant_data_from_dom(
+                page, url, variations_dict, cached_data, parent_price=price_value
+            )
+            self._validate_variant_data(variations_dict, variant_data)
 
             for v_tcin, props_dict in variations_dict.items():
                 props_items = list(props_dict.items())
@@ -539,11 +814,7 @@ class Get_Product(BaseStep4):
                 variation_sku = f"{parent_sku}-{sku_suffix}"
 
                 v_info = variant_data.get(str(v_tcin), {})
-                v_price = v_info.get("price") if v_info else None
-                if not v_price:
-                    v_price = price_value
-                else:
-                    v_price = self._format_price(v_price)
+                v_price = self._format_price(v_info["price"])
 
                 v_images = child_images_map.get(str(v_tcin), [])
                 if not v_images:
@@ -557,7 +828,7 @@ class Get_Product(BaseStep4):
                     "Sale price": v_price, "Regular price": v_price,
                     "Categories": "DefaultCategory",
                     "Images": self.Tool.config.images_split.join(v_images), "Parent": parent_sku,
-                    "brand": brand_name, "Stock": 1000.00, "is_upload": 0
+                    "brand": brand_name, "Stock": v_info.get("stock", 1000.00), "is_upload": 0
                 }
                 if len(props_items) > 0:
                     row["Attribute 1 name"] = props_items[0][0]
@@ -583,12 +854,24 @@ class Get_Product(BaseStep4):
     def close(self):
         for tab in self.tab_ls:
             tab.close()
-        self.browser.close()
+
+        try:
+            self.browser.close()
+        finally:
+            pass
+
+    def _flush_variant_cache(self):
+        with self._variant_cache_lock:
+            if self._variant_cache_changes_since_save:
+                self._save_variant_cache_locked()
 
 
     def run(self):
-        super().run()
-        self.close()
+        try:
+            return super().run()
+        finally:
+            self._flush_variant_cache()
+            self.close()
 
 
 

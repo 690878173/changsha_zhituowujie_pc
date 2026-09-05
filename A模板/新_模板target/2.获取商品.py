@@ -6,6 +6,7 @@ output_path = Tool.File.path_add_site('res/res.csv')
 fail_file = Tool.File.path_add_site('fail/2.csv')
 catch_path = Tool.File.path_add_site('hc/3/catch.json')
 index_path = Tool.File.path_add_site('hc/3/index.json')
+variant_cache_path = Tool.File.path_add_site('hc/3/variant_prices.json')
 output_ts_file = Tool.File.path_add_site('res/ts_res.csv')
 if __name__ == '__main__':
 
@@ -14,5 +15,6 @@ if __name__ == '__main__':
                 fail_file=fail_file,
                 catch_path=catch_path,
                 index_path=index_path,
+                variant_cache_path=variant_cache_path,
                 output_ts_file=output_ts_file,
                 tool=Tool).run()

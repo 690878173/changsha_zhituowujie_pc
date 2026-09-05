@@ -35,6 +35,11 @@ class Variable:
                 if part and part not in collected:
                     collected.append(part)
         if field != "Images":
+            try:
+                collected = [str(i) for i in sorted(float(value) for value in collected)]
+
+            except Exception:
+                pass
             return separator.join(collected)
 
         configured = self.Tool.config.images_split

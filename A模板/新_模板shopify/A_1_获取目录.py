@@ -19,7 +19,7 @@ def check_url(url):
     if url in [Tool.URL.base_url]:
         return 'no_url',None
 
-    for i in ['/pages/','/blogs/','/products/']:
+    for i in []:
         if i in url:
             return 'no_url',None
     return 'ok',url
@@ -30,7 +30,6 @@ def add_node(nodes, name, url='') ->dict|None:
     if not name or name in nodes:
         print('skip',name)
         return None
-        return
 
     children = {}
     url = Tool.URL.add_site(url)
@@ -57,15 +56,16 @@ def f1(url_dic):
     Tool.HTML.save(res.text)
     html = etree.HTML(res.text)
 
-    ml1 = html.xpath('//div[@class="mega-content"]//div[@class="menu-item top-level"]')
+    ml1 = html.xpath('//nav[@class="hidden h-full lg:flex"][1]/ul/li')
     header_node = []
 
 
     for node in header_node:
 
-        c_node = node.xpath('./div[@class="xxxx"]')
+        a_node = node.xpath('./div[@class="xxxx"]')
         _name = ''
         _url = url
+        # _name,_url = Tool.HTML.get_a_text_and_url(a_node[0])
 
         dic_child = add_node(url_dic, _name, _url)
 

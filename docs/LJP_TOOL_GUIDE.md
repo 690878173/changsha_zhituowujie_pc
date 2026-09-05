@@ -378,6 +378,39 @@ Step4(Tool, max_threads=3).run()
 Quchong(Tool).run()
 ```
 
+`_ljp.mb.target.Get_Product` treats a Target browser verification page as a
+manual checkpoint. It pauses newly started detail tasks and asks the operator
+to complete the visible browser challenge before pressing Enter; it does not
+cache that incomplete product. For a product with a variation hierarchy, all
+expected TCINs must have a non-empty price before the normal Step4 product
+cache is written. Successful individual variation prices are checkpointed to
+`variant_cache_path` (or an adjacent `*_variants.json` file by default), so a
+later retry only needs to collect missing variants. This Target-specific cache
+is internal resume state, while the normal Step4 cache remains the only source
+for exported product rows. Site subclasses may override
+`should_extract_all_variants(product_node, variations_dict)` and return
+`False` when a source's hierarchy is not purchasable variations; the collector
+then exports the item as a simple product rather than reporting an incomplete
+variation set. Target product collection also saves the live, raw page DOM by
+default after every product navigation. Pass `save_html=False` to disable it
+or `html_save_dir=...` to set its base directory. Snapshots are stored as
+`<html_save_dir>/<parent_tcin>/<product_tcin>.html`, including parse failures,
+so empty chip labels can be diagnosed from the original DOM. Its DrissionPage
+tabs are leased to a single Step4 worker for that worker's lifetime; do not
+round-robin live tabs between concurrent product requests. Target image
+swatches and text chips are read from their accessible `aria-label` values,
+not only visible text. Each expected Target TCIN is selected through its full
+option combination, with color before size so that color-specific size
+availability can update before the size is evaluated. A temporarily disabled
+chip is still clicked and parsed. Target's `aria-label` values may append
+`- Out of Stock`, and its unavailable CSS class is handled as the same stock
+state after that suffix is removed from the option value. That variation is
+exported with `Stock=0`; its current page price is retained, falling back to
+the selected parent price only when no variation price is rendered.
+Missing options and non-disabled click failures remain incomplete variations
+and are not cached. Leave Chromium's native user agent in place so its UA and
+Client Hints stay consistent; a proxy may still be configured normally.
+
 The Target and Amazon request configuration is read from `Tool_config` headers
 and cookies where applicable; replace expired site-specific credentials there,
 not in the Step modules.
@@ -458,14 +491,16 @@ Public import locations are the stable contract:
 
 ```python
 from _ljp.mb.shopify import GetDetail, Get_Product, Replace_imgs, WpToShopify
-from _ljp.mb.mg_shopify import GetDetail, Get_Product, MgShopifySite
+from _ljp.mb.mg_shopify import CatalogCollector, GetDetail, Get_Product, MgShopifySite, collect_catalog
 from _ljp.mb.target import GetDetail, Get_Product, Quchong, Variable
 from _ljp.mb.amazon import YMXStep1, YMXStep2, YMXStep3
 ```
 
 `_ljp.mb.mg_shopify` is the Storefront GraphQL variant for the magic Shopify
 template. Its `GetDetail` handles public-token discovery, endpoint validation,
-collection cursor pagination, and normal Step2 cache integration. Its
+collection cursor pagination, and normal Step2 cache integration. Collection
+handles are extracted from the segment after `collections`, including locale-
+prefixed paths such as `/en-us/collections/drinkware`. Its
 `Get_Product` follows the final product-page handle, requests GraphQL product
 data, and reuses the magic Shopify variation conversion. Site subclasses
 implement the `MgShopifySite.storefront_settings()` interface and return site-only values such as
@@ -473,6 +508,65 @@ implement the `MgShopifySite.storefront_settings()` interface and return site-on
 and request delay. These values do not belong in `Tool.config`. Override
 `zdy_zd(url, html_text)` for HTML-only custom fields or
 `product_query()`/`collection_query()` for an exceptional API shape.
+When a Storefront variant has no merchant SKU, or its SKU equals the product
+handle used by the parent row, its product handle and stable Shopify variant
+ID are used as a fallback SKU so later SKU-based transforms do not collapse
+unrelated variants or parent/child rows.
+
+`MergeLinkVariants` is the optional post-Step4 transform for magic Shopify
+sites that publish options as separate product URLs named
+`Product Name | Variant Value`. It first deduplicates source SKU rows while
+merging categories, then combines title-prefix groups into a normal
+`variable` parent followed by its `variation` rows. When the title suffix is
+already a native option value (for example `Hoodie | Black` with a `Color`
+option), that native option is retained; otherwise the suffix becomes a
+`Variant` option and the native options are preserved after it. Run this
+before the normal SKU deduplication step:
+
+```python
+from _ljp.mb.mg_shopify import MergeLinkVariants
+
+MergeLinkVariants(
+    Tool,
+    Tool.File.path_add_site('res/result.csv'),
+    Tool.File.path_add_site('fwq/merged_link_variants.csv'),
+).run()
+```
+
+`collect_catalog(Tool, base_url, html_path, save_path)` is the simple shared
+Step1 helper for magic Shopify home-page menus. It requests the home page,
+saves a raw HTML snapshot, then detects and parses Shopify React stream menus
+and Next.js `navigationData` menus. It preserves menu groups, retains grouping
+nodes with an empty URL, and exports only `/collections` URLs after excluding
+all `/product` links.
+
+For a site with different menu fields or output policy, subclass the public
+`CatalogCollector` instead of copying the full Step1 implementation:
+
+```python
+from _ljp.mb.mg_shopify import CatalogCollector
+
+
+class SiteCatalog(CatalogCollector):
+    def should_keep_url(self, url):
+        return '/collections/' in url and '/products/' not in url
+
+    def after_parse(self, menu):
+        menu.pop('Editorial', None)
+        return menu
+
+
+SiteCatalog(Tool, base_url, HTML_PATH, SAVE_PATH).run()
+```
+
+Override `fetch_html`, `create_parsers`, `normalize_name`, `normalize_url`,
+`should_keep_url`, `should_keep_node`, `put_node`, `after_parse`, or
+`export_catalog` as required. The supplied public parsers are
+`HydrogenHeaderParser`, `NextNavigationParser`, `ByltStreamParser`, and
+`StandardStreamParser`; a site can implement `CatalogParser` for a new field
+layout, then return it from
+`create_parsers`. Site `A_1_获取目录.py` scripts should otherwise supply only
+their local paths and `Tool` configuration.
 
 `_ljp.mb.base.step_get_detail.GetDetail` is the category/detail URL base and
 `_ljp.mb.base.step_get_product.Get_Product` is the product-detail base. Some

@@ -18,9 +18,9 @@ class Pc(GetDetail):
     def storefront_settings(self):
         # 站点专有信息只放在 Step 接口中，不污染 Tool.config。
         return {
-            "storefront_token": "ef1b9f624c705ea7623f3c2b31924b44",
-            "store_domain": "turtle-beach-usa.myshopify.com",
-            "api_version": "2023-07",
+            "storefront_token": "027982a3ff4712d30f228f275fa5d38d",
+            "store_domain": "kryo-gear.myshopify.com",
+            "api_version": "2025-07",
             "country": "US",
             "language": "EN",
         }

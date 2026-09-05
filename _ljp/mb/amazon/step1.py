@@ -6,6 +6,7 @@ Description :
 """
 import json
 import os
+import re
 import time
 import random
 from DrissionPage import ChromiumPage, ChromiumOptions
@@ -94,8 +95,10 @@ class YMXStep1:
         co.no_imgs(True)  # 禁止加载图片，提高速度
         page_obj = ChromiumPage(co)
 
-        all_asins = []
+        all_asins = {}
         total_pages = self.all_num
+
+        best_sale_num = 6
 
         try:
             for page_num in range(1, total_pages + 1):
@@ -117,18 +120,52 @@ class YMXStep1:
                 # 提取当前页的 ASIN (过滤掉广告和空值)
                 page_asins = tree.xpath('//div[@role="listitem" and @data-asin]/@data-asin')
 
-                # 去重并加入总列表
-                for asin in page_asins:
+                xpath_expr = './/div[@class="a-row a-size-small]/span[2]/div/a/@aria-label"'
+
+                xpath_expr = './/div[@class="a-row a-size-small"]//*/text()'
+                for page_div in tree.xpath('//div[@role="listitem" and @data-asin]'):
+                    asin = page_div.get('data-asin')
                     if asin and asin not in all_asins:
-                        all_asins.append(asin)
+
+                        best_saller = page_div.xpath(xpath_expr)
+                        num = 0
+                        try:
+                            for i in best_saller:
+                                if ('(' in i) and (')' in i):
+                                    text = i
+                                    # text = best_saller[0].text_content()
+                                    m = re.search(r'([\d,]+)', text)
+                                    num = int(m.group(1).replace(',', '')) if m else 0
+                        except Exception as e:
+                            print(e)
+                            pass
+
+                        all_asins[asin] = num
+
+
+                # # 去重并加入总列表
+                # for asin in page_asins:
+                #     if asin and asin not in all_asins:
+                #         all_asins.append(asin)
 
                 print(f"第 {page_num} 页采集完成，目前累计 ASIN 数量: {len(all_asins)}")
 
+            sorted_list = sorted(all_asins.items(), key=lambda item: item[1], reverse=True)
             # 4. 按照你要求的格式构造最终数据
             # 键名为 shop，值为 ASIN 字符串列表
-            final_data = {
-                "Home": all_asins
-            }
+
+            final_data = {}
+
+            for asin, num in sorted_list:
+                if best_sale_num >0 and num>0:
+                    final_data.setdefault('Best Sale??????', []).append(asin)
+                    best_sale_num -= 1
+                    print(f'{asin} sale: {num}')
+
+                final_data.setdefault('Home', []).append(asin)
+            # final_data = {
+            #     "Home": all_asins
+            # }
             with open(self.output_path, "w", encoding="utf-8") as f:
                 json.dump(final_data, f, ensure_ascii=False, indent=4)
 

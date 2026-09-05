@@ -166,6 +166,14 @@ class Get_Product(Step):
             variation = parent_product.copy()
 
             variant_sku = (variant.get('sku') or '').strip()
+            if not variant_sku or variant_sku == parent_sku:
+                # Storefront product variants may have no merchant SKU.  Keep
+                # them distinct in later SKU-based pipeline steps by falling
+                # back to Shopify's stable variant ID. A merchant SKU equal
+                # to the parent handle also needs this fallback because the
+                # parent and child must remain separate rows.
+                variant_id = str(variant.get('id') or '').rstrip('/').split('/')[-1]
+                variant_sku = f"{parent_sku}-{variant_id}" if variant_id else parent_sku
             price = self.get_money_amount(variant.get('price'))
             compare_at_price = self.get_money_amount(variant.get('compareAtPrice'))
             variation['Type'] = 'variation'
@@ -315,5 +323,3 @@ class Get_Product(Step):
 
 
 __all__ = ['Get_Product']
-
-

@@ -45,9 +45,19 @@ class GetDetail(MgShopifySite, BaseGetDetail):
     @staticmethod
     def collection_handle(url: object) -> str:
         parts = [unquote(part) for part in urlsplit(str(url or "")).path.split("/") if part]
-        if len(parts) < 2 or parts[0].casefold() != "collections" or not parts[1]:
+        # Hydrogen/Oxygen storefronts commonly prefix collection paths with a
+        # locale (for example ``/en-us/collections/drinkware``).  The
+        # collection handle is the segment after ``collections`` regardless
+        # of that optional prefix.
+        try:
+            collection_index = next(
+                index for index, part in enumerate(parts) if part.casefold() == "collections"
+            )
+        except StopIteration:
             return ""
-        return clean_text(parts[1])
+        if collection_index + 1 >= len(parts):
+            return ""
+        return clean_text(parts[collection_index + 1])
 
     @staticmethod
     def cursor_from_url(url: object) -> str:
@@ -62,7 +72,9 @@ class GetDetail(MgShopifySite, BaseGetDetail):
 
     def build_params(self, page: PageModel):
         return {
-            "source": "mg-shopify-storefront-v1",
+            # Bump the cache namespace after changing collection-handle
+            # parsing so old empty pages cannot mask the corrected result.
+            "source": "mg-shopify-storefront-v2",
             "handle": page.extra.get("collection_handle") or self.collection_handle(page.url),
             "page": page.page,
             "first": self.page_size,
