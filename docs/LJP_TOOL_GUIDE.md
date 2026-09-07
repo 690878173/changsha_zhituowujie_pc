@@ -13,18 +13,19 @@ This document is the primary reference for AI agents and contributors using or c
 - Optional fingerprinted Playwright pages
 - Reusable Step2, Step3, Step4, and post-processing templates
 
-Create the shared tool once in a site-local `config.py`:
+Create a site-local `config.toml`; the adjacent `config.py` only reads it and
+constructs the shared tool:
 
-```python
-from _ljp import Base_tool, Tool_config
-
-config = Tool_config(
-    base_url='https://example.com',
-    site='example.com',
-    zk=0.8,
-)
-Tool = Base_tool(config)
+```toml
+[site]
+base_url = "https://example.com"
+site = "example.com"
+site_type = "shopify"
+zk = 0.8
 ```
+
+`A模板` ships this input-layer pattern for every maintained template. The
+underlying `_ljp` base configuration and Step modules remain unchanged.
 
 Pass that same `Tool` object to every Step.
 
@@ -417,8 +418,9 @@ not in the Step modules.
 
 The ready-to-run external project templates are `新_模板亚马逊` and
 `新_模板target`. Each follows the numbered external-template layout. Their
-`config.py` contains only shared site settings (URL, site name, browser,
-common headers/cookies, discount, image separator, and run order); each
+`config.toml` contains shared site settings (URL, site name, browser,
+common headers/cookies, discount, image separator, and run order); the adjacent
+`config.py` only loads it; each
 numbered Step file owns its collector keywords, endpoint-specific headers and
 cookies, parser options, parent-field policy, CDN prefix, and export columns.
 `config.ini` is reserved for image-download concurrency, proxy, and WebP
@@ -484,14 +486,14 @@ normally contain only request parameters, selectors/endpoints, and parsing.
 | Change output columns | `fieldnames`, `Product.to_dic()`, `WpToShopify.EXTRA_META_COLUMNS` | CSV post-processing |
 | Force a fresh crawl | Step `flush=True` | deleting cache files manually |
 | Re-run only temporary failures | inspect `fail/*.json`, leave `flush=False` | clearing all caches |
-| Change browser engine | `config.py` `browser.backend` | replacing page calls in shared code |
+| Change browser engine | site `config.toml` `[request.browser]` `backend` | replacing page calls in shared code |
 | Change image CDN naming | subclass `Replace_imgs.build_new_url_base` | editing hash logic |
 
 Public import locations are the stable contract:
 
 ```python
-from _ljp.mb.shopify import GetDetail, Get_Product, Replace_imgs, WpToShopify
-from _ljp.mb.mg_shopify import CatalogCollector, GetDetail, Get_Product, MgShopifySite, collect_catalog
+from _ljp.mb.shopify import CatalogCollector as ShopifyCatalogCollector, GetDetail, Get_Product, Replace_imgs, ShopifyMainMenuParser, WpToShopify
+from _ljp.mb.mg_shopify import CatalogCollector as MgCatalogCollector, ByltStreamParser, GetDetail, Get_Product, HydrogenHeaderParser, MgShopifySite, NextNavigationParser, StandardStreamParser
 from _ljp.mb.target import GetDetail, Get_Product, Quchong, Variable
 from _ljp.mb.amazon import YMXStep1, YMXStep2, YMXStep3
 ```
@@ -533,18 +535,27 @@ MergeLinkVariants(
 ).run()
 ```
 
-`collect_catalog(Tool, base_url, html_path, save_path)` is the simple shared
-Step1 helper for magic Shopify home-page menus. It requests the home page,
-saves a raw HTML snapshot, then detects and parses Shopify React stream menus
-and Next.js `navigationData` menus. It preserves menu groups, retains grouping
-nodes with an empty URL, and exports only `/collections` URLs after excluding
-all `/product` links.
+`_ljp.mb.catalog` is an internal common base: it contains only the parser
+interface, request/save/fallback lifecycle, node hooks, and output helpers. It
+does not contain either site's built-in menu parser or site `CatalogCollector`.
+`collect_catalog(Tool, base_url, html_path, save_path)` is provided separately
+by `_ljp.mb.shopify` and `_ljp.mb.mg_shopify`. Each package's collector uses the
+common lifecycle to request the home page, save a raw HTML snapshot, preserve
+empty-URL grouping nodes, and export only `/collections` URLs after excluding
+`/product` links.
+Their built-in parser sets are intentionally separate: ordinary Shopify uses
+`ShopifyThemeParser` and `ShopifyMainMenuParser`; magic Shopify uses
+`HydrogenHeaderParser`, `NextNavigationParser`, `ByltStreamParser`, and
+`StandardStreamParser`. The latter follows indexed React-stream menu items
+recursively and supports both the `_321/_323` and `_320/_322` child-list
+layouts used by different Oxygen/Hydrogen builds.
 
-For a site with different menu fields or output policy, subclass the public
-`CatalogCollector` instead of copying the full Step1 implementation:
+For a site with different menu fields or output policy, subclass the
+`CatalogCollector` from the corresponding package instead of copying the full
+Step1 implementation:
 
 ```python
-from _ljp.mb.mg_shopify import CatalogCollector
+from _ljp.mb.shopify import CatalogCollector
 
 
 class SiteCatalog(CatalogCollector):
@@ -562,9 +573,9 @@ SiteCatalog(Tool, base_url, HTML_PATH, SAVE_PATH).run()
 Override `fetch_html`, `create_parsers`, `normalize_name`, `normalize_url`,
 `should_keep_url`, `should_keep_node`, `put_node`, `after_parse`, or
 `export_catalog` as required. The supplied public parsers are
-`HydrogenHeaderParser`, `NextNavigationParser`, `ByltStreamParser`, and
-`StandardStreamParser`; a site can implement `CatalogParser` for a new field
-layout, then return it from
+`ShopifyThemeParser`, `ShopifyMainMenuParser`, `HydrogenHeaderParser`,
+`NextNavigationParser`, `ByltStreamParser`, and `StandardStreamParser`; a site
+can implement `CatalogParser` for a new field layout, then return it from
 `create_parsers`. Site `A_1_获取目录.py` scripts should otherwise supply only
 their local paths and `Tool` configuration.
 
@@ -575,21 +586,29 @@ hook signatures below are authoritative.
 
 ## Configuration And Lifecycle
 
-The recommended site-local `config.py` has three layers:
+The recommended site-local `config.toml` contains the three configuration
+layers; `config.py` only loads it:
 
-```python
-from _ljp import Base_tool, Tool_config
+```toml
+[site]
+base_url = "https://shop.example"
+site = "shop.example"
+site_type = "shopify"
+zk = 0.8
 
-config = Tool_config(
-    base_url='https://shop.example',
-    site='shop.example',       # stored as the first label, e.g. ``shop``
-    site_type='shopify',       # used by File.dz_path()/fl_path()
-    zk=0.8,                    # sale price = compare-at price * zk
-    headers={}, cookies={},
-    browser={'enabled': False},
-)
-Tool: Base_tool = Base_tool(config)
+[request]
+headers = ""
+cookies = ""
+max_retry = 3
+time_out = 30
+
+[request.browser]
+enabled = false
 ```
+
+Empty `headers`/`cookies` values inherit the base configuration; `{}` means an
+explicit empty dictionary. The template `config.py` reads this TOML and passes
+the resulting values to the unchanged `Tool_config` constructor.
 
 `Tool_config` deep-copies mappings at construction. Later changes to the
 original `headers`, `cookies`, or `browser` dictionaries do not affect the
@@ -829,4 +848,4 @@ browser dependency and a working Chromium/DrissionPage installation.
 When source inspection is unavoidable, read the narrow module from the map
 above, then update this guide if the confirmed public contract changed. Keep
 site-specific credentials, endpoint headers, and selectors in the site Step or
-`config.py`; never add them to shared `_ljp` defaults.
+`config.toml`; never add them to shared `_ljp` defaults.

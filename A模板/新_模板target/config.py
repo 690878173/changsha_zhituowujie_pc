@@ -1,41 +1,20 @@
-from _ljp import Base_tool, Tool_config
+"""站点输入配置：读取同目录 config.toml。"""
+from _ljp.toml_config import TomlSiteConfig
 
-base_url =
-site =
-zk = 0.3
-site_type = 'target'
-# Common request defaults used by all steps.
-headers = {}
-cookies = {}
-max_retry = 3
-time_out = 30
-images_split = None
-custom_key = None
 
-browser = {
-    "enabled": True,
-    "backend": "drissionpage",
-    "headless": False,
-    "context_count": 3,
-    "timeout": 30000,
-    "stable_wait_ms": 500,
-    "drission_options": {
-        "arguments": ["--disable-blink-features=AutomationControlled", "--no-first-run"],
-        "auto_port": True,
-    },
-}
+_settings = TomlSiteConfig.from_file(__file__)
 
-config = Tool_config(
-    base_url=base_url,
-    site=site,
-    zk=zk,
-    site_type=site_type,
-    max_retry=max_retry,
-    time_out=time_out,
-    headers=headers,
-    cookies=cookies,
-    custom_key=custom_key,
-    images_split=images_split,
-    browser=browser,
-)
-Tool: Base_tool = Base_tool(config)
+# 保留模板原有公共变量，Step 文件无需改动。
+base_url = _settings.base_url
+site = _settings.site
+site_type = _settings.site_type
+zk = _settings.zk
+headers = _settings.headers
+cookies = _settings.cookies
+max_retry = _settings.max_retry
+time_out = _settings.time_out
+images_split = _settings.images_split
+custom_key = _settings.custom_key
+browser = _settings.browser
+
+config, Tool = _settings.build_tool()

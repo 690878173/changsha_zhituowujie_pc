@@ -1,0 +1,26 @@
+[site]
+base_url = ""
+site = ""
+site_type = "target"
+zk = 0.3
+
+[request]
+max_retry = 3
+time_out = 30
+headers = {}
+cookies = {}
+images_split = ""
+custom_key = ""
+
+[request.browser]
+enabled = true
+backend = "drissionpage"
+headless = false
+context_count = 3
+timeout = 30000
+stable_wait_ms = 500
+
+[request.browser.drission_options]
+arguments = ["--disable-blink-features=AutomationControlled", "--no-first-run"]
+auto_port = true
+

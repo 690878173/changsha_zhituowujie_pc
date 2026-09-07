@@ -1,56 +1,20 @@
-from _ljp import Base_tool, Tool_config
-# 请求头
-headers = None
-# cookie
-cookies = None
-# 重试次数
-max_retry = None
-# 超时时间
-time_out = None
-
-# NOTE =========
-
-base_url =
-site =
-zk = 0.3
-
-# NOTE =========
-
-# 图片链接自带逗号时，使用此分割
-images_split = None
-
-# 字典需要携带自定义字段时，使用字段
-custom_key = None
-
-# 'shopify'
-site_type = 'amazon'
+"""站点输入配置：读取同目录 config.toml。"""
+from _ljp.toml_config import TomlSiteConfig
 
 
-browser = {
-    "enabled": True,
-    "backend": "drissionpage",
-    "headless": False,
-        "context_count": 1,
-    "timeout": 30000,
-    "stable_wait_ms": 500,
-    "drission_options": {
-        "arguments": ["--disable-blink-features=AutomationControlled"],
-        "no_imgs": True,
-        "auto_port": True,
-    },
-}
+_settings = TomlSiteConfig.from_file(__file__)
 
-config = Tool_config(
-    base_url=base_url,
-    site=site,
-    zk=zk,
-    site_type=site_type,
-    max_retry=max_retry,
-    time_out=time_out,
-    headers=headers,
-    cookies=cookies,
-    custom_key=custom_key,
-    images_split=images_split,
-    browser=browser,
-)
-Tool: Base_tool = Base_tool(config)
+# 保留模板原有公共变量，Step 文件无需改动。
+base_url = _settings.base_url
+site = _settings.site
+site_type = _settings.site_type
+zk = _settings.zk
+headers = _settings.headers
+cookies = _settings.cookies
+max_retry = _settings.max_retry
+time_out = _settings.time_out
+images_split = _settings.images_split
+custom_key = _settings.custom_key
+browser = _settings.browser
+
+config, Tool = _settings.build_tool()

@@ -1,123 +1,59 @@
-from lxml import etree
+from pathlib import Path
 
-from config import base_url,Tool
-
-save_path = Tool.File.path_add_site('data/ml.json')
-
-def clean_text(values):
-    if isinstance(values, str):
-        values = [values]
-
-    return ' '.join(' '.join(values).split())
+from config import Tool, base_url
+from _ljp.mb.shopify import CatalogCollector
 
 
-def check_url(url):
-    # 由具体站点覆盖,默认原路返回
-    for i in []:
-        if i in url:
-            return 'skip',None
-    if url in [Tool.URL.base_url]:
-        return 'no_url',None
-
-    for i in []:
-        if i in url:
-            return 'no_url',None
-    return 'ok',url
+HTML_PATH = Path(__file__).with_name('1.html')
+SAVE_PATH = Tool.File.path_add_site('data/ml.json')
 
 
-def add_node(nodes, name, url='') ->dict|None:
-    name = clean_text(name)
-    if not name or name in nodes:
-        print('skip',name)
-        return None
+class SiteCatalogCollector(CatalogCollector):
+    """普通 Shopify 站点的目录定制入口。"""
 
-    children = {}
-    url = Tool.URL.add_site(url)
-    typ,url = check_url(url)
+    def fetch_html(self):
+        return super().fetch_html()
 
-    if url or typ != 'skip':
+    def create_parsers(self):
+        return super().create_parsers()
 
-        nodes[name] = {'url': url, 'child': children}
+    def select_parser(self, html):
+        return super().select_parser(html)
 
-        return nodes[name]['child']
+    def parse_html(self, html):
+        return super().parse_html(html)
 
-    else:
+    def normalize_name(self, value):
+        return super().normalize_name(value)
 
-        return None
+    def normalize_url(self, url):
+        return super().normalize_url(url)
 
+    def should_keep_url(self, url):
+        return super().should_keep_url(url)
 
+    def should_keep_node(self, name, url, child, depth):
+        return super().should_keep_node(name, url, child, depth)
 
-@Tool.zs('数据结构:{title:{url:xxx,child:{title:url}}')
-def f1(url_dic):
+    def put_node(self, nodes, name, url='', child=None, depth=0):
+        return super().put_node(nodes, name, url, child, depth)
 
-    url = base_url
+    def after_parse(self, menu):
+        return super().after_parse(menu)
 
-    res = Tool.get(url)
-    Tool.HTML.save(res.text)
-    html = etree.HTML(res.text)
-
-    ml1 = html.xpath('//nav[@class="hidden h-full lg:flex"][1]/ul/li')
-    header_node = []
-
-
-    for node in header_node:
-
-        a_node = node.xpath('./div[@class="xxxx"]')
-        _name = ''
-        _url = url
-        # _name,_url = Tool.HTML.get_a_text_and_url(a_node[0])
-
-        dic_child = add_node(url_dic, _name, _url)
+    def export_catalog(self, menu):
+        return super().export_catalog(menu)
 
 
-
-        if not (dic_child is None):
-            childs = node.xpath('./ul/li')
-            if not childs:
-                childs = node.xpath('./div/div/ul/li')
-
-            f2(dic_child, childs)
-    print(url_dic)
-    return url_dic
-
-def f2(dic, childs):
-    for child in childs:
-        c_node = child.xpath('./div[@class="xxxx"]')
-
-        _name = ''
-        _url = ''
-        if 'collections' not in _url:
-            continue
-        _url = Tool.URL.add_site(_url)
-        dic[_name] = {'url': _url, 'child': {}}
-
-        n_childs_ls = []
-        f3(dic[_name]['child'],n_childs_ls)
-
-    return dic
-
-
-def f3(dic,childs):
-    for child in childs:
-        c_a = child.xpath('./a')
-
-        c_tx, c_url = Tool.HTML.get_a_text_and_url(c_a[0])
-        _name = c_tx
-        _url = c_url
-        _url = Tool.URL.add_site(_url)
-
-        dic[_name] = {'url': _url, 'child': {}}
+@Tool.zs('数据结构:{title:{url:xxx,child:{title:{url:xxx,child:{...}}}}}')
+def f1():
+    return SiteCatalogCollector(Tool, base_url, HTML_PATH, SAVE_PATH).run()
 
 
 def run():
-    url_dic = {}
-    f1(url_dic)
-
-    Tool.to_ml_json(url_dic,save_path)
+    menu = f1()
+    Tool.print(f'已采集 {len(menu)} 个一级目录', color='green')
 
 
 if __name__ == '__main__':
     run()
-
-
-
