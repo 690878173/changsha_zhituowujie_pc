@@ -20,7 +20,8 @@ from .browser import (
 from .分割csv import split_shopify_csv_large
 
 
-Tool = Base_tool(config=Tool_config(base_url='',site='',site_type='',zk=1))
+def get_tool():
+    Tool = Base_tool(config=Tool_config(base_url='',site='',site_type='',zk=1))
 
 
 __all__ = [

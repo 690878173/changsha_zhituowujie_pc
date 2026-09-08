@@ -164,7 +164,7 @@ class WebPValidator:
             with pd.option_context('display.max_rows', None,  # 显示所有行
                                    'display.max_columns', None,
                                    'display.max_colwidth', None):  # 显示所有列
-                print(df_failed[['SKU', '失败详情']])
+                print(df_failed[['SKU', '失败详情']].to_string())
             Path(save_path).parent.mkdir(parents=True, exist_ok=True)
             df_failed.to_csv(save_path, index=False)
         else:
