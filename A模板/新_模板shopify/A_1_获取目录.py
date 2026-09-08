@@ -9,7 +9,7 @@ SAVE_PATH = Tool.File.path_add_site('data/ml.json')
 
 
 class SiteCatalogCollector(CatalogCollector):
-    """普通 Shopify 站点的目录定制入口。"""
+    """普通 Shopify"""
 
     def fetch_html(self):
         return super().fetch_html()
