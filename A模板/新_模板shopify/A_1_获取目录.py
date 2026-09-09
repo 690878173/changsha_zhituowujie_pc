@@ -1,59 +1,135 @@
-from pathlib import Path
+from lxml import etree
 
-from config import Tool, base_url
-from _ljp.mb.shopify import CatalogCollector
+from config import base_url,Tool
 
-
-HTML_PATH = Path(__file__).with_name('1.html')
-SAVE_PATH = Tool.File.path_add_site('data/ml.json')
+save_path = Tool.File.path_add_site('data/ml.json')
 
 
-class SiteCatalogCollector(CatalogCollector):
-    """普通 Shopify"""
+class Ml:
 
-    def fetch_html(self):
-        return super().fetch_html()
+    @staticmethod
+    def clean_text(values):
+        if isinstance(values, str):
+            values = [values.strip()]
+        return ' '.join(' '.join(values).split())
 
-    def create_parsers(self):
-        return super().create_parsers()
+    @staticmethod
+    def check_url(url):
 
-    def select_parser(self, html):
-        return super().select_parser(html)
+        skip_url_ls = ['/product/']
+        skip_url_ls = []
+        for i in skip_url_ls:
+            if i in url:
+                return 'skip',None
 
-    def parse_html(self, html):
-        return super().parse_html(html)
-
-    def normalize_name(self, value):
-        return super().normalize_name(value)
-
-    def normalize_url(self, url):
-        return super().normalize_url(url)
-
-    def should_keep_url(self, url):
-        return super().should_keep_url(url)
-
-    def should_keep_node(self, name, url, child, depth):
-        return super().should_keep_node(name, url, child, depth)
-
-    def put_node(self, nodes, name, url='', child=None, depth=0):
-        return super().put_node(nodes, name, url, child, depth)
-
-    def after_parse(self, menu):
-        return super().after_parse(menu)
-
-    def export_catalog(self, menu):
-        return super().export_catalog(menu)
+        if url in [Tool.URL.base_url,'']:
+            return 'no_url',None
 
 
-@Tool.zs('数据结构:{title:{url:xxx,child:{title:{url:xxx,child:{...}}}}}')
-def f1():
-    return SiteCatalogCollector(Tool, base_url, HTML_PATH, SAVE_PATH).run()
+        no_url_ls = []
+        for i in no_url_ls:
+            if i in url:
+                return 'no_url', None
+
+
+
+        return 'ok',url
+
+    @staticmethod
+    def add_node(dic, name, url='') -> dict|None:
+        name = Ml.clean_text(name)
+        if not name or name in dic:
+            print('skip',name)
+            return None
+
+        url = Tool.URL.add_site(url)
+        typ, url = Ml.check_url(url)
+
+        if url or typ != 'skip':
+
+            dic[name] = {'url': url, 'child': {}}
+
+            return dic[name]['child']
+        else:
+            return None
+
+
+@Tool.zs('数据结构:{title:{url:xxx,child:{title:url}}')
+def f1(dic):
+
+    url = base_url
+
+    res = Tool.get(url)
+    Tool.HTML.save(res.text)
+    html = etree.HTML(res.text)
+
+    ml1 = html.xpath('//div[@class="mega-content"]//div[@class="menu-item top-level"]')
+    for node in ml1:
+
+        a_node = node.xpath('./div[@class="xxxx"]/a')
+        if a_node:
+            _name,_url = Tool.HTML.get_a_text_and_url(a_node[0])
+
+        else:
+            _name = ''
+            _url = ''
+
+
+
+        child_dic = Ml.add_node(dic, _name, _url)
+
+        if isinstance(child_dic, dict):
+            child = node.xpath('./ul/li')
+
+            f2(child_dic, child)
+
+    print(dic)
+    return dic
+
+
+def f2(dic:dict, child_ls:list):
+    for node in child_ls:
+        a_node = node.xpath('./div[@class="xxxx"]')
+        if a_node:
+            _name,_url = Tool.HTML.get_a_text_and_url(a_node[0])
+        else:
+            _name = ''
+            _url = ''
+        # if 'collections' not in _url:
+        #     continue
+
+        child_dic = Ml.add_node(dic, _name, _url)
+
+        if isinstance(child_dic, dict):
+            child = node.xpath('./ul/li')
+            f3(child_dic, child)
+
+    return dic
+
+
+def f3(dic:dict,child_ls:list):
+
+    for node in child_ls:
+        a_node = node.xpath('./a')
+
+        if a_node:
+            _name, _url = Tool.HTML.get_a_text_and_url(a_node[0])
+        else:
+            _name = ''
+            _url = ''
+
+        dic[_name] = {'url': _url, 'child': {}}
 
 
 def run():
-    menu = f1()
-    Tool.print(f'已采集 {len(menu)} 个一级目录', color='green')
+    dic = {}
+    f1(dic)
+
+    Tool.to_ml_json(dic,save_path)
 
 
 if __name__ == '__main__':
     run()
+
+
+

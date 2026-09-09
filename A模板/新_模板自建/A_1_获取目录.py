@@ -129,11 +129,7 @@ def run():
 
 
 if __name__ == '__main__':
-    # run()
-
-    text = "\n\n\n\n          \nA B \n\n\n\n         "
-
-    print(Ml.clean_text(text))
+    run()
 
 
 
