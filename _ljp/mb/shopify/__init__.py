@@ -1,10 +1,9 @@
 
 from .catalog import (
-    CatalogCollector,
-    CatalogParser,
+    CatCol,
+    HeaderInlineMenuParser,
     ShopifyMainMenuParser,
     ShopifyThemeParser,
-    collect_catalog,
 )
 from .get_product import Get_Product
 from _ljp.mb.base import Collection, GetDetail, Replace_imgs, Shopify_dz, WpToShopify
@@ -17,10 +16,8 @@ __all__ = [
     "WpToShopify",
     "Replace_imgs",
     "Collection",
-    "CatalogCollector",
+    "CatCol",
+    "HeaderInlineMenuParser",
     "ShopifyThemeParser",
     "ShopifyMainMenuParser",
-    "CatalogParser",
-    "collect_catalog",
-
 ]

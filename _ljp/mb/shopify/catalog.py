@@ -1,8 +1,31 @@
-"""普通 Shopify 主题的目录采集。"""
+"""普通 Shopify 首页目录解析。"""
+
+from urllib.parse import urlsplit
 
 from lxml import html as lxml_html
 
-from _ljp.mb.catalog import CatalogCollectorBase, CatalogParser, clean_text
+from _ljp.mb.base.get_ml import CatalogParser, CatCol as BaseCatCol
+
+
+def _clean_text(value):
+    text = ' '.join(str(value or '').split())
+    for suffix in (' ->', ' >'):
+        if text.endswith(suffix):
+            text = text[:-len(suffix)].rstrip()
+    return text
+
+
+def _is_collection_url(url):
+    path = urlsplit(url or '').path.lower()
+    return '/collections' in path and '/product' not in path
+
+
+def _put_node(collector, nodes, name, url='', child=None):
+    """保留分组节点，只有 collection 链接写入目录结果。"""
+    normalized_url = collector.normalize_url(url) if url else ''
+    if normalized_url and not _is_collection_url(normalized_url):
+        normalized_url = ''
+    return collector.add_node(nodes, name, normalized_url, child)
 
 
 class ShopifyThemeParser(CatalogParser):
@@ -15,15 +38,14 @@ class ShopifyThemeParser(CatalogParser):
 
     @staticmethod
     def link_text(element):
-        values = element.xpath('.//text()[not(ancestor::svg)]')
-        return clean_text(' '.join(values))
+        return _clean_text(' '.join(element.xpath('.//text()[not(ancestor::svg)]')))
 
-    def parse_links(self, links, collector, depth=1):
+    def parse_links(self, links, collector):
         result = {}
         for link in links:
             name = self.link_text(link)
             if name:
-                collector.put_node(result, name, link.get('href') or '', depth=depth)
+                _put_node(collector, result, name, link.get('href') or '')
         return result
 
     def parse_group_list(self, menu_list, collector, result):
@@ -31,15 +53,18 @@ class ShopifyThemeParser(CatalogParser):
             nested = item.xpath('./ul[1]')
             heading = item.xpath('./span[1]')
             if nested and heading:
-                child = self.parse_links(nested[0].xpath('./li/a[@href]'), collector, 2)
-                collector.put_node(result, self.link_text(heading[0]), '', child, 1)
+                child = self.parse_links(nested[0].xpath('./li/a[@href]'), collector)
+                _put_node(collector, result, self.link_text(heading[0]), '', child)
             elif nested:
                 for link in nested[0].xpath('./li/a[@href]'):
                     name = self.link_text(link)
                     if name:
-                        collector.put_node(result, name, link.get('href') or '', depth=1)
+                        _put_node(collector, result, name, link.get('href') or '')
             else:
-                result.update(self.parse_links(item.xpath('./a[@href]'), collector, 1))
+                for link in item.xpath('./a[@href]'):
+                    name = self.link_text(link)
+                    if name:
+                        _put_node(collector, result, name, link.get('href') or '')
 
     def parse_submenu(self, submenu, collector):
         result = {}
@@ -52,15 +77,17 @@ class ShopifyThemeParser(CatalogParser):
                 if 'nav-height-grid' in section_class:
                     heading = section.xpath('./span[1]')
                     if heading:
-                        child = self.parse_links(section.xpath('./a[@href]'), collector, 2)
-                        collector.put_node(result, self.link_text(heading[0]), '', child, 1)
+                        child = self.parse_links(section.xpath('./a[@href]'), collector)
+                        _put_node(collector, result, self.link_text(heading[0]), '', child)
                 elif section.tag == 'ul':
                     self.parse_group_list(section, collector, result)
-        image_groups = submenu.xpath(
+        for image_group in submenu.xpath(
             './div[contains(concat(" ", normalize-space(@class), " "), " image-links ")]'
-        )
-        for image_group in image_groups:
-            result.update(self.parse_links(image_group.xpath('./a[@href]'), collector, 1))
+        ):
+            for link in image_group.xpath('./a[@href]'):
+                name = self.link_text(link)
+                if name:
+                    _put_node(collector, result, name, link.get('href') or '')
         return result
 
     def parse_menu_list(self, menu_list, collector, result):
@@ -68,12 +95,10 @@ class ShopifyThemeParser(CatalogParser):
         for index, item in enumerate(children):
             if item.tag != 'li':
                 continue
-            # 可展开菜单的链接位于 label 内，普通菜单项直接位于 li 内。
             links = item.xpath('./a[@href] | ./label/a[@href]')
             if not links:
                 continue
             link = links[0]
-            name = self.link_text(link)
             child = {}
             next_class = (
                 (children[index + 1].get('class') or '').split()
@@ -82,7 +107,7 @@ class ShopifyThemeParser(CatalogParser):
             )
             if 'sub-menu' in next_class:
                 child = self.parse_submenu(children[index + 1], collector)
-            collector.put_node(result, name, link.get('href') or '', child, 0)
+            _put_node(collector, result, self.link_text(link), link.get('href') or '', child)
 
     def parse(self, html, collector):
         tree = lxml_html.fromstring(html)
@@ -111,15 +136,14 @@ class ShopifyMainMenuParser(CatalogParser):
 
     @staticmethod
     def link_text(element):
-        values = element.xpath('.//text()[not(ancestor::svg)]')
-        return clean_text(' '.join(values))
+        return _clean_text(' '.join(element.xpath('.//text()[not(ancestor::svg)]')))
 
-    def parse_links(self, links, collector, depth=1):
+    def parse_links(self, links, collector):
         result = {}
         for link in links:
             name = self.link_text(link)
             if name:
-                collector.put_node(result, name, link.get('href') or '', depth=depth)
+                _put_node(collector, result, name, link.get('href') or '')
         return result
 
     def parse_child_panel(self, panel, collector):
@@ -130,20 +154,19 @@ class ShopifyMainMenuParser(CatalogParser):
         if not menu_lists:
             return result
         for item in menu_lists[0].xpath('./li'):
-            item_classes = self.class_tokens(item)
-            if 'has-inline-dropdown' in item_classes:
+            if 'has-inline-dropdown' in self.class_tokens(item):
                 buttons = item.xpath('./button[1]')
                 nested = item.xpath(
                     './ul[contains(concat(" ", normalize-space(@class), " "), " inline-dropdown-list ")][1]'
                 )
                 if buttons and nested:
-                    children = self.parse_links(nested[0].xpath('./li/a[@href]'), collector, 2)
-                    collector.put_node(result, self.link_text(buttons[0]), '', children, 1)
+                    child = self.parse_links(nested[0].xpath('./li/a[@href]'), collector)
+                    _put_node(collector, result, self.link_text(buttons[0]), '', child)
                 continue
             links = item.xpath('./a[@href][1]')
             if links:
                 link = links[0]
-                collector.put_node(result, self.link_text(link), link.get('href') or '', depth=1)
+                _put_node(collector, result, self.link_text(link), link.get('href') or '')
         return result
 
     def parse(self, html, collector):
@@ -154,14 +177,8 @@ class ShopifyMainMenuParser(CatalogParser):
         panels = navs[0].xpath(
             './div[contains(concat(" ", normalize-space(@class), " "), " main-menu-panel ")]'
         )
-        root_panels = [
-            panel for panel in panels
-            if 'main-menu-panel--child' not in self.class_tokens(panel)
-        ]
-        child_panels = [
-            panel for panel in panels
-            if 'main-menu-panel--child' in self.class_tokens(panel)
-        ]
+        root_panels = [panel for panel in panels if 'main-menu-panel--child' not in self.class_tokens(panel)]
+        child_panels = [panel for panel in panels if 'main-menu-panel--child' in self.class_tokens(panel)]
         if not root_panels:
             raise RuntimeError('页面中未找到 Shopify 主菜单面板')
         root_lists = root_panels[0].xpath(
@@ -181,27 +198,76 @@ class ShopifyMainMenuParser(CatalogParser):
             if 'has-children' in self.class_tokens(item) and child_index < len(child_panels):
                 child = self.parse_child_panel(child_panels[child_index], collector)
                 child_index += 1
-            collector.put_node(result, self.link_text(link), link.get('href') or '', child, 0)
+            _put_node(collector, result, self.link_text(link), link.get('href') or '', child)
         if not result:
             raise RuntimeError('Shopify 主菜单没有可用目录')
         return result
 
 
-class CatalogCollector(CatalogCollectorBase):
-    """普通 Shopify 自己的目录采集器。"""
+class HeaderInlineMenuParser(CatalogParser):
+    """解析 Dawn 系 ``header__inline-menu`` 三层菜单。"""
 
-    parser_types = (ShopifyThemeParser, ShopifyMainMenuParser)
+    menu_xpath = '//nav[contains(concat(" ", normalize-space(@class), " "), " header__inline-menu ")]'
+
+    def matches(self, html):
+        return 'header__inline-menu' in html
+
+    @staticmethod
+    def text(node, xpath):
+        return _clean_text(' '.join(node.xpath(xpath)))
+
+    def parse_leaf_nodes(self, nodes, collector):
+        result = {}
+        for node in nodes:
+            links = node.xpath('./a[@href][1]')
+            if not links:
+                continue
+            link = links[0]
+            name = _clean_text(' '.join(link.xpath('.//text()[not(ancestor::svg)]')))
+            if name:
+                _put_node(collector, result, name, link.get('href') or '')
+        return result
+
+    def parse(self, html, collector):
+        tree = lxml_html.fromstring(html)
+        menus = tree.xpath(self.menu_xpath)
+        if not menus:
+            raise RuntimeError('页面中未找到 header__inline-menu 菜单')
+        result = {}
+        for details in menus[0].xpath('./ul/li/header-menu/details'):
+            name = self.text(details, './summary/span//text()')
+            if not name:
+                continue
+            child = {}
+            for group in details.xpath('./div/ul/li'):
+                group_name = self.text(group, './span//text()')
+                leaves = self.parse_leaf_nodes(group.xpath('./ul/li'), collector)
+                if group_name:
+                    _put_node(collector, child, group_name, '', leaves)
+                else:
+                    for leaf_name, leaf in leaves.items():
+                        _put_node(collector, child, leaf_name, leaf['url'], leaf['child'])
+            _put_node(collector, result, name, '', child)
+        if not result:
+            raise RuntimeError('header__inline-menu 没有可用目录')
+        return result
 
 
-def collect_catalog(tool, base_url, html_path, save_path, collector_cls=CatalogCollector):
-    """使用普通 Shopify 内置解析器采集目录。"""
-    return collector_cls(tool, base_url, html_path, save_path).run()
+class CatCol(BaseCatCol):
+    """普通 Shopify 目录采集器。"""
+
+    parser_types = (
+        HeaderInlineMenuParser,
+        ShopifyThemeParser,
+        ShopifyMainMenuParser,
+    )
+    skip_url_ls = []
+    no_url_ls = []
 
 
 __all__ = [
-    'CatalogCollector',
-    'CatalogParser',
-    'ShopifyThemeParser',
+    'CatCol',
+    'HeaderInlineMenuParser',
     'ShopifyMainMenuParser',
-    'collect_catalog',
+    'ShopifyThemeParser',
 ]

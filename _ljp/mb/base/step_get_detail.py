@@ -100,6 +100,9 @@ class GetDetail(Base):
         if pagemodel.is_fail():
             return index_id, False, False, 0
         product_urls = list(set(product_urls or []))
+
+        if len(product_urls) == 0:
+            self.Tool.print('url数量为0', color='yellow')
         self.index.append(index_id, pagemodel.url, {
             'data': product_urls,
             'next_url': pagemodel.next_url,

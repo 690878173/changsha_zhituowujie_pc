@@ -80,6 +80,15 @@ class Get_Product(Base):
         """
         raise NotImplementedError
 
+    def should_stop_requests(self):
+        """Return ``True`` when site-specific request workers should stop.
+
+        The default keeps the normal Step4 behavior. A site can override this
+        for a manual anti-bot checkpoint without recording queued URLs as
+        failed or caching empty product rows.
+        """
+        return False
+
 
     # ================= 通用流程（无需修改） =================
 
@@ -168,6 +177,8 @@ class Get_Product(Base):
     def request_worker(self):
         try:
             while True:
+                if self.should_stop_requests():
+                    break
                 try:
                     seq_id, category, url = self.task_queue.get_nowait()
                 except Empty:

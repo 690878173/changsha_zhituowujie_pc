@@ -3,9 +3,6 @@ from curl_cffi.requests import RequestsError
 import time
 import json
 import random
-# --- 1. 配置部分 (使用你提供的最新校验数据) ---
-# 注意：_px3 和 accessToken 会过期，建议失效后再次替换
-# UA 已改为 Chrome，与 impersonate="chrome120" 指纹对齐，降低被识别后断连的概率
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

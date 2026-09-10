@@ -313,6 +313,11 @@ def fetch_product(self, url, category):
     return [row_dict]
 ```
 
+For a site-specific manual checkpoint, a subclass may override
+`should_stop_requests()` and return `True`. Active workers finish their current
+item, queued URLs remain uncached for a later retry, and normal partial CSV
+output is still written. The default returns `False`.
+
 The return may contain dictionaries or objects exposing `to_dic()`. It must normalize to a non-empty list. `None` or an empty list is treated as a failed parse, is not cached, and retries on the next run. Step4 reuses successful product results for the same URL across categories, writes cache data, then exports the test CSV and the final CSV. The `Categories` field is replaced with the task category during final output.
 
 Use `Tool.Product.Simple(...).to_dic()` or `Tool.Product.Variation(...).to_dic()` when the standard output schema fits. Keep HTTP/browser request and parser code inside `fetch_product`.
@@ -492,8 +497,8 @@ normally contain only request parameters, selectors/endpoints, and parsing.
 Public import locations are the stable contract:
 
 ```python
-from _ljp.mb.shopify import CatalogCollector as ShopifyCatalogCollector, GetDetail, Get_Product, Replace_imgs, ShopifyMainMenuParser, WpToShopify
-from _ljp.mb.mg_shopify import CatalogCollector as MgCatalogCollector, ByltStreamParser, GetDetail, Get_Product, HydrogenHeaderParser, MgShopifySite, NextNavigationParser, StandardStreamParser
+from _ljp.mb.shopify import CatCol as ShopifyCatCol, GetDetail, Get_Product, Replace_imgs, ShopifyMainMenuParser, WpToShopify
+from _ljp.mb.mg_shopify import CatCol as MgShopifyCatCol, ByltStreamParser, GetDetail, Get_Product, HydrogenHeaderParser, MgShopifySite, NextNavigationParser, StandardStreamParser
 from _ljp.mb.target import GetDetail, Get_Product, Quchong, Variable
 from _ljp.mb.amazon import YMXStep1, YMXStep2, YMXStep3
 ```
@@ -535,49 +540,41 @@ MergeLinkVariants(
 ).run()
 ```
 
-`_ljp.mb.catalog` is an internal common base: it contains only the parser
-interface, request/save/fallback lifecycle, node hooks, and output helpers. It
-does not contain either site's built-in menu parser or site `CatalogCollector`.
-`collect_catalog(Tool, base_url, html_path, save_path)` is provided separately
-by `_ljp.mb.shopify` and `_ljp.mb.mg_shopify`. Each package's collector uses the
-common lifecycle to request the home page, save a raw HTML snapshot, preserve
-empty-URL grouping nodes, and export only `/collections` URLs after excluding
-`/product` links.
-Their built-in parser sets are intentionally separate: ordinary Shopify uses
-`ShopifyThemeParser` and `ShopifyMainMenuParser`; magic Shopify uses
-`HydrogenHeaderParser`, `NextNavigationParser`, `ByltStreamParser`, and
-`StandardStreamParser`. The latter follows indexed React-stream menu items
-recursively and supports both the `_321/_323` and `_320/_322` child-list
-layouts used by different Oxygen/Hydrogen builds.
+目录采集的基础接口是 `_ljp.mb.base.get_ml.CatalogParser`，采集生命周期由
+`_ljp.mb.base.get_ml.CatCol` 提供。普通 Shopify 与魔改 Shopify 在各自的
+`catalog.py` 中定义自己的 `CatCol`，仅通过 `parser_types` 注册解析器；
+`skip_url_ls` 与 `no_url_ls` 默认为空列表。没有 `CatalogCollector`、
+`collect_catalog` 或 `_ljp.mb.catalog` 的兼容入口。
 
-For a site with different menu fields or output policy, subclass the
-`CatalogCollector` from the corresponding package instead of copying the full
-Step1 implementation:
+每个具体页面结构解析器必须直接继承 `CatalogParser`，自行实现
+`matches(html)` 和 `parse(html, collector)`。解析器负责其页面结构、节点
+过滤和菜单层级；`CatCol` 负责请求首页、保存原始 HTML、请求失败时读取本地
+快照，以及输出目录 JSON。内置解析器只保留 collection URL，并排除 product
+URL，同时保留无 URL 的分组节点。普通 Shopify 支持
+`HeaderInlineMenuParser`、`ShopifyThemeParser` 与 `ShopifyMainMenuParser`；
+魔改 Shopify 支持 `HeaderInlineMenuParser`、`HydrogenHeaderParser`、
+`NextNavigationParser`、`ByltStreamParser` 与 `StandardStreamParser`。后者
+递归处理 indexed React-stream 的子菜单项，兼容 `_321/_323` 与 `_320/_322`
+子列表布局。
+
+模板只需构造对应站点的 `CatCol`：
 
 ```python
-from _ljp.mb.shopify import CatalogCollector
+from pathlib import Path
 
+from _ljp.mb.shopify import CatCol
 
-class SiteCatalog(CatalogCollector):
-    def should_keep_url(self, url):
-        return '/collections/' in url and '/products/' not in url
-
-    def after_parse(self, menu):
-        menu.pop('Editorial', None)
-        return menu
-
-
-SiteCatalog(Tool, base_url, HTML_PATH, SAVE_PATH).run()
+CatCol(
+    Tool,
+    base_url,
+    Tool.File.path_add_site('data/ml.json'),
+    Path(__file__).with_name('1.html'),
+).run()
 ```
 
-Override `fetch_html`, `create_parsers`, `normalize_name`, `normalize_url`,
-`should_keep_url`, `should_keep_node`, `put_node`, `after_parse`, or
-`export_catalog` as required. The supplied public parsers are
-`ShopifyThemeParser`, `ShopifyMainMenuParser`, `HydrogenHeaderParser`,
-`NextNavigationParser`, `ByltStreamParser`, and `StandardStreamParser`; a site
-can implement `CatalogParser` for a new field layout, then return it from
-`create_parsers`. Site `A_1_获取目录.py` scripts should otherwise supply only
-their local paths and `Tool` configuration.
+新增菜单结构时，从 `_ljp.mb.base.get_ml` 导入 `CatalogParser`，在对应站点
+`catalog.py` 新增直接继承它的具体解析器，并将该类加入该站点 `CatCol` 的
+`parser_types`。不要在模板脚本中复制解析逻辑。
 
 `_ljp.mb.base.step_get_detail.GetDetail` is the category/detail URL base and
 `_ljp.mb.base.step_get_product.Get_Product` is the product-detail base. Some
@@ -813,9 +810,14 @@ Run scripts from the directory that contains the script, using the project
 virtual-environment interpreter (per repository instructions):
 
 ```powershell
+$env:PYTHONPATH = 'J:\changsha'
 Set-Location 'J:\changsha\A模板\新_模板shopify'
 & 'J:\changsha\.venv\Scripts\python.exe' 'A_1_获取目录.py'
 ```
+
+`_ljp` is imported from the repository root in this workspace. Set
+`PYTHONPATH` to that root for direct numbered-script runs; this applies only
+to the current PowerShell process and does not modify the virtual environment.
 
 For a configured one-click runner, `Base_tool.run(BASE_DIR, STEPS)` executes
 each script with `cwd=BASE_DIR`, stops on the first non-zero exit code, and

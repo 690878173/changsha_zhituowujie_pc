@@ -1,14 +1,31 @@
-"""魔改 Shopify 首页目录采集。
-
-这里仅处理 Storefront/Hydrogen/React 流等魔改 Shopify 页面结构；普通
-Shopify 主题的菜单解析位于 ``_ljp.mb.shopify.catalog``。
-"""
+"""魔改 Shopify 首页目录解析。"""
 
 import json
+from urllib.parse import urlsplit
 
 from lxml import html as lxml_html
 
-from _ljp.mb.catalog import CatalogCollectorBase, CatalogParser, clean_text, is_collection_url
+from _ljp.mb.base.get_ml import BaseCatalogParser, CatalogParser, CatCol as BaseCatCol
+
+
+def _clean_text(value):
+    text = ' '.join(str(value or '').split())
+    for suffix in (' ->', ' >'):
+        if text.endswith(suffix):
+            text = text[:-len(suffix)].rstrip()
+    return text
+
+
+def _is_collection_url(url):
+    path = urlsplit(url or '').path.lower()
+    return '/collections' in path and '/product' not in path
+
+
+def _put_node(collector, nodes, name, url='', child=None):
+    normalized_url = collector.normalize_url(url) if url else ''
+    if normalized_url and not _is_collection_url(normalized_url):
+        normalized_url = ''
+    return collector.add_node(nodes, name, normalized_url, child)
 
 
 def load_stream_data(html):
@@ -65,20 +82,10 @@ def _indexed_link(data, value):
     text = _field(data, node, '_365')
     if not isinstance(url, str) or not isinstance(text, str):
         return None
-    return clean_text(text), url
-
-
-def _put(nodes, name, url='', child=None, collector=None, depth=0):
-    collector.put_node(nodes, name, url, child, depth)
+    return _clean_text(text), url
 
 
 def _iter_standard_child_items(data, item):
-    """递归寻找 React 流对象中的菜单项。
-
-    不同 Oxygen/Hydrogen 版本使用的字段编号不同：有的通过
-    ``_321/_323`` 保存子项，有的通过 ``_320/_322`` 保存。菜单项本身
-    都带有 ``_197``，因此只在魔改 Shopify 解析器内按这个特征递归。
-    """
     seen = set()
 
     def walk(value, is_root=False):
@@ -102,21 +109,19 @@ def _iter_standard_child_items(data, item):
     yield from walk(item, is_root=True)
 
 
-def _parse_standard_item(data, value, collector, depth=0):
+def _parse_standard_item(data, value, collector):
     item = _node(data, value)
-    name_ref = _node(data, item.get('_197'))
-    name = _resolve(data, name_ref.get('_82'))
+    name = _resolve(data, _node(data, item.get('_197')).get('_82'))
     if not isinstance(name, str):
         return {}
-    url_ref = _node(data, item.get('_76'))
-    url = _resolve(data, url_ref.get('_82'))
+    url = _resolve(data, _node(data, item.get('_76')).get('_82'))
     if not isinstance(url, str):
         url = ''
     child = {}
     for child_item in _iter_standard_child_items(data, item):
-        child.update(_parse_standard_item(data, child_item, collector, depth + 1))
+        child.update(_parse_standard_item(data, child_item, collector))
     result = {}
-    _put(result, name, url, child, collector, depth)
+    _put_node(collector, result, name, url, child)
     return result
 
 
@@ -136,7 +141,7 @@ def extract_standard_navigation(data, collector):
     raise RuntimeError('未找到 headerPrimaryMenu 或 headerMenu 菜单数据')
 
 
-def _bylt_group(data, group_ref, collector, depth=0):
+def _bylt_group(data, group_ref, collector):
     group = _node(data, group_ref)
     main = _indexed_link(data, group.get('_2625'))
     if not main:
@@ -146,11 +151,11 @@ def _bylt_group(data, group_ref, collector, depth=0):
     for link_ref in _resolve(data, group.get('_2667')) or []:
         link = _indexed_link(data, link_ref)
         if link:
-            _put(child, link[0], link[1], collector=collector, depth=depth + 1)
+            _put_node(collector, child, link[0], link[1])
     return name, url, child
 
 
-def _collect_bylt_links(data, value, collector, result, seen, depth=0):
+def _collect_bylt_links(data, value, collector, result, seen):
     value = _resolve(data, value)
     if isinstance(value, int):
         return
@@ -161,12 +166,12 @@ def _collect_bylt_links(data, value, collector, result, seen, depth=0):
         seen.add(identity)
         link = _indexed_link(data, value)
         if link:
-            _put(result, link[0], link[1], collector=collector, depth=depth)
+            _put_node(collector, result, link[0], link[1])
         for child in value.values():
-            _collect_bylt_links(data, child, collector, result, seen, depth + 1)
+            _collect_bylt_links(data, child, collector, result, seen)
     elif isinstance(value, list):
         for child in value:
-            _collect_bylt_links(data, child, collector, result, seen, depth)
+            _collect_bylt_links(data, child, collector, result, seen)
 
 
 def extract_bylt_navigation(data, collector):
@@ -179,30 +184,21 @@ def extract_bylt_navigation(data, collector):
             continue
         name, url = top
         child = {}
-        centerlinks = _resolve(data, item.get('_2650'))
-        for center_ref in centerlinks or []:
+        for center_ref in _resolve(data, item.get('_2650')) or []:
             center = _node(data, center_ref)
             for group_ref in _resolve(data, center.get('_2653')) or []:
-                group = _bylt_group(data, group_ref, collector, 1)
+                group = _bylt_group(data, group_ref, collector)
                 if group:
-                    _put(child, group[0], group[1], group[2], collector, 1)
+                    _put_node(collector, child, group[0], group[1], group[2])
         if not child:
-            _collect_bylt_links(
-                data,
-                _resolve(data, item.get('_2745')),
-                collector,
-                child,
-                set(),
-                1,
-            )
-        _put(result, name, url, child, collector)
+            _collect_bylt_links(data, _resolve(data, item.get('_2745')), collector, child, set())
+        _put_node(collector, result, name, url, child)
     if not result:
         raise RuntimeError('未找到 BYLT menuItem 菜单数据')
     return result
 
 
 def matching_bracket(text, start):
-    """返回 JSON 数组的结束位置。"""
     depth = 0
     in_string = False
     escaped = False
@@ -227,6 +223,34 @@ def matching_bracket(text, start):
     return None
 
 
+def _next_menu(items, collector):
+    result = {}
+    for item in items:
+        name = _clean_text(item.get('linkTitle') or item.get('name') or '')
+        url = item.get('slug') or ''
+        child = {}
+        for group in item.get('linkCollection') or []:
+            links = [link for link in group.get('links') or [] if link.get('linkTitle') or link.get('name')]
+            if not links:
+                continue
+            heading = links[0]
+            group_child = {}
+            for link in links[1:]:
+                _put_node(
+                    collector,
+                    group_child,
+                    link.get('linkTitle') or link.get('name'),
+                    link.get('slug') or '',
+                )
+            group_name = heading.get('linkTitle') or heading.get('name')
+            group_url = heading.get('slug') or ''
+            normalized_url = collector.normalize_url(group_url) if group_url else ''
+            if group_child or _is_collection_url(normalized_url):
+                _put_node(collector, child, group_name, group_url, group_child)
+        _put_node(collector, result, name, url, child)
+    return result
+
+
 def extract_next_navigation(html, collector):
     marker = 'self.__next_f.push([1,"'
     for chunk in html.split(marker)[1:]:
@@ -235,50 +259,57 @@ def extract_next_navigation(html, collector):
             decoded = json.loads('"' + payload + '"')
         except (TypeError, json.JSONDecodeError):
             continue
-        data_marker = 'navigationData":['
-        start = decoded.find(data_marker)
+        start = decoded.find('navigationData":[')
         if start < 0:
             continue
         start += len('navigationData":')
         end = matching_bracket(decoded, start)
-        if end is None:
-            continue
-        return _next_menu(json.loads(decoded[start:end]), collector)
+        if end is not None:
+            return _next_menu(json.loads(decoded[start:end]), collector)
     raise RuntimeError('首页中未找到 navigationData 目录数据')
 
 
-def _next_menu(items, collector):
-    result = {}
-    for item in items:
-        name = clean_text(item.get('linkTitle') or item.get('name') or '')
-        url = item.get('slug') or ''
-        child = {}
-        for group in item.get('linkCollection') or []:
-            links = [
-                link for link in group.get('links') or []
-                if link.get('linkTitle') or link.get('name')
-            ]
-            if not links:
+class HeaderInlineMenuParser(BaseCatalogParser):
+    """解析 Dawn 系 ``header__inline-menu`` 三层菜单。"""
+
+    menu_xpath = '//nav[contains(concat(" ", normalize-space(@class), " "), " header__inline-menu ")]'
+
+    def matches(self, html):
+        return 'header__inline-menu' in html
+
+    @staticmethod
+    def text(node, xpath):
+        return _clean_text(' '.join(node.xpath(xpath)))
+
+    def parse(self, html, collector):
+        tree = lxml_html.fromstring(html)
+        menus = tree.xpath(self.menu_xpath)
+        if not menus:
+            raise RuntimeError('页面中未找到 header__inline-menu 菜单')
+        result = {}
+        for details in menus[0].xpath('./ul/li/header-menu/details'):
+            name = self.text(details, './summary/span//text()')
+            if not name:
                 continue
-            heading = links[0]
-            group_child = {}
-            for link in links[1:]:
-                _put(
-                    group_child,
-                    link.get('linkTitle') or link.get('name'),
-                    link.get('slug') or '',
-                    collector=collector,
-                    depth=2,
-                )
-            group_name = heading.get('linkTitle') or heading.get('name')
-            group_url = heading.get('slug') or ''
-            if group_child or collector.should_keep_url(collector.normalize_url(group_url)):
-                _put(child, group_name, group_url, group_child, collector, 1)
-        _put(result, name, url, child, collector)
-    return result
+            child = {}
+            for group in details.xpath('./div/ul/li'):
+                group_name = self.text(group, './span//text()')
+                leaves = {}
+                for link in group.xpath('./ul/li/a[@href]'):
+                    leaf_name = _clean_text(' '.join(link.xpath('.//text()[not(ancestor::svg)]')))
+                    if leaf_name:
+                        _put_node(collector, leaves, leaf_name, link.get('href') or '')
+                if group_name:
+                    _put_node(collector, child, group_name, '', leaves)
+                else:
+                    child.update(leaves)
+            _put_node(collector, result, name, '', child)
+        if not result:
+            raise RuntimeError('header__inline-menu 没有可用目录')
+        return result
 
 
-class StandardStreamParser(CatalogParser):
+class StandardStreamParser(BaseCatalogParser):
     """解析标准魔改 Shopify React 流菜单。"""
 
     menu_keys = ('headerPrimaryMenu', 'headerMenu')
@@ -290,7 +321,7 @@ class StandardStreamParser(CatalogParser):
         return extract_standard_navigation(load_stream_data(html), collector)
 
 
-class ByltStreamParser(CatalogParser):
+class ByltStreamParser(BaseCatalogParser):
     """解析 BYLT 的 React 流菜单。"""
 
     def matches(self, html):
@@ -300,7 +331,7 @@ class ByltStreamParser(CatalogParser):
         return extract_bylt_navigation(load_stream_data(html), collector)
 
 
-class NextNavigationParser(CatalogParser):
+class NextNavigationParser(BaseCatalogParser):
     """解析 Next.js ``navigationData`` 菜单。"""
 
     def matches(self, html):
@@ -310,7 +341,7 @@ class NextNavigationParser(CatalogParser):
         return extract_next_navigation(html, collector)
 
 
-class HydrogenHeaderParser(CatalogParser):
+class HydrogenHeaderParser(BaseCatalogParser):
     """解析 Hydrogen/React Router 渲染在 HTML 中的头部菜单。"""
 
     header_xpath = '//header[@id="header-nav"]'
@@ -321,15 +352,14 @@ class HydrogenHeaderParser(CatalogParser):
 
     @staticmethod
     def link_text(element):
-        values = element.xpath('.//text()[not(ancestor::svg)]')
-        return clean_text(' '.join(values))
+        return _clean_text(' '.join(element.xpath('.//text()[not(ancestor::svg)]')))
 
-    def parse_dropdown(self, dropdown, collector, depth=1):
+    def parse_dropdown(self, dropdown, collector):
         result = {}
         for link in dropdown.xpath('.//a[@href]'):
             name = self.link_text(link)
             if name:
-                collector.put_node(result, name, link.get('href') or '', depth=depth)
+                _put_node(collector, result, name, link.get('href') or '')
         return result
 
     def parse(self, html, collector):
@@ -342,45 +372,40 @@ class HydrogenHeaderParser(CatalogParser):
         desktop_menus = header.xpath(self.desktop_menu_xpath)
         if not main_navs or not desktop_menus:
             raise RuntimeError('页面中未找到 Hydrogen 主菜单或下拉菜单')
-
-        top_items = main_navs[0].xpath('./ul/li')
-        dropdowns = desktop_menus[0].xpath('./nav')
         result = {}
-        for index, item in enumerate(top_items):
+        dropdowns = desktop_menus[0].xpath('./nav')
+        for index, item in enumerate(main_navs[0].xpath('./ul/li')):
             link = item.xpath('./a[@href][1]')
             children = item.xpath('./*')
             element = link[0] if link else children[0] if children else item
-            name = self.link_text(element)
-            url = link[0].get('href') if link else ''
             child = self.parse_dropdown(dropdowns[index], collector) if index < len(dropdowns) else {}
-            collector.put_node(result, name, url or '', child, index)
+            _put_node(collector, result, self.link_text(element), link[0].get('href') if link else '', child)
         if not result:
             raise RuntimeError('Hydrogen 主菜单没有可用目录')
         return result
 
 
-class CatalogCollector(CatalogCollectorBase):
-    """魔改 Shopify 自己的目录采集器。"""
+class CatCol(BaseCatCol):
+    """魔改 Shopify 目录采集器。"""
 
     parser_types = (
+        HeaderInlineMenuParser,
         HydrogenHeaderParser,
         NextNavigationParser,
         ByltStreamParser,
         StandardStreamParser,
     )
-
-
-def collect_catalog(tool, base_url, html_path, save_path, collector_cls=CatalogCollector):
-    """使用魔改 Shopify 内置解析器采集目录。"""
-    return collector_cls(tool, base_url, html_path, save_path).run()
+    skip_url_ls = []
+    no_url_ls = []
 
 
 __all__ = [
-    'CatalogCollector',
-    'CatalogParser',
+    'BaseCatalogParser',
+    'ByltStreamParser',
+    'CatCol',
+    'HeaderInlineMenuParser',
     'HydrogenHeaderParser',
     'NextNavigationParser',
-    'ByltStreamParser',
     'StandardStreamParser',
-    'collect_catalog',
+    'CatalogParser'
 ]

@@ -1,58 +1,70 @@
-from pathlib import Path
-
 from config import Tool, base_url
-from _ljp.mb.mg_shopify import CatalogCollector
+from _ljp.mb.base.get_ml import BaseCatalogParser, CatCol
 
 
-HTML_PATH = Path(__file__).with_name('1.html')
-SAVE_PATH = Tool.File.path_add_site('data/ml.json')
+save_path = Tool.File.path_add_site('data/ml.json')
+
+class Paraer(BaseCatalogParser):
+
+    # f1 返回 {title:{url:str,child:{title:{title:str,child:{}}}}}
+    def f1(self, html, dic):
+        ml1 = html.xpath('//nav[@class="header__inline-menu"]/ul/li/header-menu/details')
+        for node in ml1:
+
+            names = node.xpath('./summary/span/text()')
+            if not names:
+                continue
+            _name = names[0]
+            _url = ''
+
+            child_dic = self.collector.add_node(dic, _name, _url)
+            if isinstance(child_dic, dict):
+                child = node.xpath('./div/ul/li')
+
+                self.f2(child_dic, child)
+
+    def f2(self, dic: dict, child_ls: list):
+        for node in child_ls:
+
+            names = node.xpath('./span/text()')
+            if not names:
+                continue
+            _name = names[0]
+            _url = ''
+            # if 'collections' not in _url:
+            #     continue
+
+            child_dic = self.collector.add_node(dic, _name, _url)
+
+            if isinstance(child_dic, dict):
+                child = node.xpath('./ul/li')
+                self.f3(child_dic, child)
+
+        return dic
+
+    def f3(self, dic: dict, child_ls: list):
+        for node in child_ls:
+            a_node = node.xpath('./a')
+
+            if a_node:
+                _name, _url = self.collector.tool.HTML.get_a_text_and_url(a_node[0])
+            else:
+                _name = ''
+                _url = ''
+
+            if '/pages/' in _url:
+                continue
+            elif '/blogs/' in _url:
+                continue
+            else:
+                _url = self.collector.tool.URL.add_site(_url)
+
+            dic[_name] = {'url': _url, 'child': {}}
 
 
-class SiteCatalogCollector(CatalogCollector):
-
-    def fetch_html(self):
-        return super().fetch_html()
-
-    def create_parsers(self):
-        return super().create_parsers()
-
-    def select_parser(self, html):
-        return super().select_parser(html)
-
-    def parse_html(self, html):
-        return super().parse_html(html)
-
-    def normalize_name(self, value):
-        return super().normalize_name(value)
-
-    def normalize_url(self, url):
-        return super().normalize_url(url)
-
-    def should_keep_url(self, url):
-        return super().should_keep_url(url)
-
-    def should_keep_node(self, name, url, child, depth):
-        return super().should_keep_node(name, url, child, depth)
-
-    def put_node(self, nodes, name, url='', child=None, depth=0):
-        return super().put_node(nodes, name, url, child, depth)
-
-    def after_parse(self, menu):
-        return super().after_parse(menu)
-
-    def export_catalog(self, menu):
-        return super().export_catalog(menu)
-
-
-@Tool.zs('数据结构:{title:{url:xxx,child:{title:{url:xxx,child:{...}}}}}')
-def f1():
-    return SiteCatalogCollector(Tool, base_url, HTML_PATH, SAVE_PATH).run()
-
-
-def run():
-    menu = f1()
-    Tool.print(f'已采集 {len(menu)} 个一级目录', color='green')
+class MgShopifyCatCol(CatCol):
+    parser_types = (*CatCol.parser_types,Paraer,)
 
 
 if __name__ == '__main__':
-    run()
+    MgShopifyCatCol(Tool, base_url, save_path).run()

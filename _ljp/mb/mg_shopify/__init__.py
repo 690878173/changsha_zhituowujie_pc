@@ -6,12 +6,13 @@ from .merge_link_variants import MergeLinkVariants
 from .storefront import MgShopifySite
 from .catalog import (
     ByltStreamParser,
-    CatalogCollector,
-    CatalogParser,
+    CatCol,
+    HeaderInlineMenuParser,
     HydrogenHeaderParser,
     NextNavigationParser,
     StandardStreamParser,
-    collect_catalog,
+    BaseCatalogParser,
+    CatalogParser
 )
 from _ljp.mb.base import Collection, Replace_imgs, Shopify_dz, WpToShopify
 
@@ -24,11 +25,12 @@ __all__ = [
     "WpToShopify",
     "Shopify_dz",
     "Collection",
-    "CatalogCollector",
-    "CatalogParser",
+    "CatCol",
+    "HeaderInlineMenuParser",
     "HydrogenHeaderParser",
     "NextNavigationParser",
     "ByltStreamParser",
     "StandardStreamParser",
-    "collect_catalog",
+    'BaseCatalogParser',
+    'CatalogParser'
 ]
