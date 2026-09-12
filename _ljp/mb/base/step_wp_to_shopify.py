@@ -303,5 +303,7 @@ class WpToShopify:
 
         self.Tool.print('注意自定义字段是否写入列表')
         source_columns = pd.read_csv(input_file, nrows=0).columns
-        self.Tool.print(f'当前字段:{source_columns}')
+        self.Tool.print(f'当前输入字段:{source_columns}')
+        source_columns = pd.read_csv(output_file, nrows=0).columns
+        self.Tool.print(f'当前输出字段:{source_columns}')
         return output_file

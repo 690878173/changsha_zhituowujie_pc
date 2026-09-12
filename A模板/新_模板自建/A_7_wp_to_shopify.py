@@ -199,7 +199,9 @@ if __name__ == "__main__":
     Tool.print('注意自定义字段是否写入列表')
     Tool.print('注意自定义字段是否写入列表')
     df = pd.read_csv(input_csv).columns
-    Tool.print(f'当前字段:{df}')
+    Tool.print(f'当前输入字段:{df}')
+    df = pd.read_csv(output_csv).columns
+    Tool.print(f'当前输出字段:{df}')
 
     # 以下代码为可能的后续更改请勿修改或者删除
     # df = pd.read_csv(output_csv)

@@ -2,6 +2,7 @@
 from .catalog import (
     CatCol,
     HeaderInlineMenuParser,
+    MegaMenuDetailsParser,
     ShopifyMainMenuParser,
     ShopifyThemeParser,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "Collection",
     "CatCol",
     "HeaderInlineMenuParser",
+    "MegaMenuDetailsParser",
     "ShopifyThemeParser",
     "ShopifyMainMenuParser",
 ]

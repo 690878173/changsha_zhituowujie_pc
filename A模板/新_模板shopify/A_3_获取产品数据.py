@@ -79,7 +79,7 @@ class Pc(Get_Product):
         #     for i in ['Specs and Materials', 'Features']:
         #         if i in name:
         #             value = node.xpath('./div')[0]
-        #             dic[name] = Tool.HTML.clean_product_desc(value)
+        #             dic[i] = Tool.HTML.clean_product_desc(value)
         #             break
         #
         # return dic

@@ -253,6 +253,157 @@ class HeaderInlineMenuParser(CatalogParser):
         return result
 
 
+class MegaMenuDetailsParser(CatalogParser):
+    """解析 ``nav[aria-label="Primary"]`` 里 ``details[is="details-mega"]`` 的 mega menu。
+
+    顶层是 ``summary`` 中的菜单名，展开层里每个 ``li`` 是一个分组，分组可以继续
+    通过 ``ul/li`` 下钻。``mega-menu__shop_all`` 容器只代表上一级的 Shop All
+    链接，它自身不成节点，子级提升到上一级，因此目录最多三级。只保留
+    collection 链接，无链接但有子级的分组保留。导航栏之外的 collection 链接
+    （首页卡片、抽屉等）统一挂到 ``page_group_name`` 这个自定义一级目录下。
+    """
+
+    nav_xpath = '//nav[@aria-label="Primary"]'
+    item_list_xpath = (
+        './/ul[contains(concat(" ", normalize-space(@class), " "), " mega-menu__list ")]/li'
+    )
+    shop_all_xpath = (
+        './div[contains(concat(" ", normalize-space(@class), " "), " mega-menu__shop_all ")]'
+        '//a[@href]'
+    )
+    heading_class_xpath = 'contains(concat(" ", normalize-space(@class), " "), " heading ")'
+    page_group_name = 'Other'
+
+    def matches(self, html):
+        return (
+            'aria-label="Primary"' in html
+            and 'details-mega' in html
+            and 'mega-menu__list' in html
+        )
+
+    @staticmethod
+    def link_text(element):
+        """读取链接文本，跳过主题用于 hover 动画的 ``btn-duplicate`` 副本。"""
+        return _clean_text(
+            ' '.join(
+                element.xpath(
+                    './/text()[not(ancestor::svg)'
+                    ' and not(ancestor::*[contains(concat(" ", normalize-space(@class), " "),'
+                    ' " btn-duplicate ")])]'
+                )
+            )
+        )
+
+    def group_heading(self, node):
+        """读取 ``li`` 自身的 ``h2`` 标题，返回 ``(名称, 链接)``。"""
+        heads = node.xpath('./h2[1]')
+        if not heads:
+            return '', ''
+        links = heads[0].xpath('./a[@href][1]')
+        if links:
+            return self.link_text(links[0]), links[0].get('href') or ''
+        return self.link_text(heads[0]), ''
+
+    def parse_groups(self, nodes, collector):
+        """递归解析同一层级的分组节点。"""
+        result = {}
+        for node in nodes:
+            if node.tag != 'li':
+                continue
+            child = self.parse_groups(node.xpath('./ul[1]/li'), collector)
+            shop_all = node.xpath(self.shop_all_xpath)
+            name, url = self.group_heading(node)
+            if not name and shop_all:
+                # Shop All 容器：链接归上一级，子级提升到当前层级
+                for child_name, child_node in child.items():
+                    result.setdefault(child_name, child_node)
+                continue
+            if not name:
+                links = node.xpath('./a[@href][1]')
+                if links:
+                    name = self.link_text(links[0])
+                    url = links[0].get('href') or ''
+            _put_node(collector, result, name, url, child)
+        return result
+
+    def page_link_name(self, link):
+        """首页卡片优先用标题，其次 ``aria-label``，最后回退到链接文本。"""
+        heads = link.xpath(f'.//span[{self.heading_class_xpath}][1]')
+        if heads:
+            name = self.link_text(heads[0])
+            if name:
+                return name
+        label = _clean_text(link.get('aria-label'))
+        if label:
+            return label
+        return self.link_text(link)
+
+    @staticmethod
+    def collect_urls(nodes, found=None):
+        """收集目录树里已经出现的绝对链接。"""
+        if found is None:
+            found = set()
+        for node in nodes.values():
+            url = node.get('url')
+            if url:
+                found.add(url)
+            MegaMenuDetailsParser.collect_urls(node.get('child') or {}, found)
+        return found
+
+    def parse_page_links(self, tree, collector, known):
+        """收集导航栏之外的 collection 链接。"""
+        extra = {}
+        for link in tree.xpath('//a[@href]'):
+            if link.xpath('ancestor::nav[@aria-label="Primary"]'):
+                continue
+            href = link.get('href') or ''
+            if not href or href.startswith('#'):
+                continue
+            url = collector.normalize_url(href)
+            if not url or url in known or not _is_collection_url(url):
+                continue
+            if urlsplit(url).path.rstrip('/').endswith('/collections'):
+                continue
+            if _put_node(collector, extra, self.page_link_name(link), href) is not None:
+                known.add(url)
+        return extra
+
+    def parse(self, html, collector):
+        tree = lxml_html.fromstring(html)
+        navs = tree.xpath(self.nav_xpath)
+        if not navs:
+            raise RuntimeError('页面中未找到 nav[aria-label="Primary"] 菜单')
+        result = {}
+        for item in navs[0].xpath('./ul/li'):
+            details = item.xpath('./details[1]')
+            if not details:
+                links = item.xpath('./a[@href][1]')
+                if links:
+                    _put_node(collector, result, self.link_text(links[0]), links[0].get('href') or '')
+                continue
+            detail = details[0]
+            names = detail.xpath(
+                './summary//span[contains(concat(" ", normalize-space(@class), " "), " btn-text ")][1]'
+            )
+            shop_all = detail.xpath(
+                './/div[contains(concat(" ", normalize-space(@class), " "), " mega-menu__shop_all ")]'
+                '//a[@href][1]'
+            )
+            _put_node(
+                collector,
+                result,
+                self.link_text(names[0]) if names else '',
+                shop_all[0].get('href') if shop_all else '',
+                self.parse_groups(detail.xpath(self.item_list_xpath), collector),
+            )
+        if not result:
+            raise RuntimeError('Primary mega menu 没有可用目录')
+        extra = self.parse_page_links(tree, collector, self.collect_urls(result))
+        if extra:
+            _put_node(collector, result, self.page_group_name, '', extra)
+        return result
+
+
 class CatCol(BaseCatCol):
     """普通 Shopify 目录采集器。"""
 
@@ -260,6 +411,7 @@ class CatCol(BaseCatCol):
         HeaderInlineMenuParser,
         ShopifyThemeParser,
         ShopifyMainMenuParser,
+        MegaMenuDetailsParser,
     )
     skip_url_ls = []
     no_url_ls = []
@@ -268,6 +420,7 @@ class CatCol(BaseCatCol):
 __all__ = [
     'CatCol',
     'HeaderInlineMenuParser',
+    'MegaMenuDetailsParser',
     'ShopifyMainMenuParser',
     'ShopifyThemeParser',
 ]

@@ -21,7 +21,7 @@ constructs the shared tool:
 base_url = "https://example.com"
 site = "example.com"
 site_type = "shopify"
-zk = 0.8
+zk = 0.3
 ```
 
 `A模板` ships this input-layer pattern for every maintained template. The
@@ -551,7 +551,11 @@ MergeLinkVariants(
 过滤和菜单层级；`CatCol` 负责请求首页、保存原始 HTML、请求失败时读取本地
 快照，以及输出目录 JSON。内置解析器只保留 collection URL，并排除 product
 URL，同时保留无 URL 的分组节点。普通 Shopify 支持
-`HeaderInlineMenuParser`、`ShopifyThemeParser` 与 `ShopifyMainMenuParser`；
+`HeaderInlineMenuParser`、`ShopifyThemeParser`、`ShopifyMainMenuParser` 与
+`MegaMenuDetailsParser`（`nav[aria-label="Primary"]` 下 `details[is="details-mega"]`
+的 mega menu；`mega-menu__shop_all` 容器自身不成节点、链接归上一级并把子级
+提升一级，因此目录最多三级；导航栏之外的 collection 链接统一挂到自定义
+一级目录 `Other` 下）；
 魔改 Shopify 支持 `HeaderInlineMenuParser`、`HydrogenHeaderParser`、
 `NextNavigationParser`、`ByltStreamParser` 与 `StandardStreamParser`。后者
 递归处理 indexed React-stream 的子菜单项，兼容 `_321/_323` 与 `_320/_322`

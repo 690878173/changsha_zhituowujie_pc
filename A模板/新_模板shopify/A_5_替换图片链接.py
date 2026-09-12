@@ -24,5 +24,4 @@ if __name__ == '__main__':
     pc.run()
     # wb = Tool.File.Web(csv_output_path)
     # fail_path = 'fail/失败图片链接.csv'
-    # Tool.File.create_dir(fail_path)
     # wb.run(fail_path)

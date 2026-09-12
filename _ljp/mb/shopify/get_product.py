@@ -78,9 +78,6 @@ class Get_Product(Step):
 
         return woo_product
 
-
-
-
     @staticmethod
     def get_money_amount(value):
         if isinstance(value, dict):
@@ -295,8 +292,8 @@ class Get_Product(Step):
                 variation['Sale price'] = regular_price
 
             variation['In stock?'] = '1' if variant.get('available', True) else '0'
-            variation['Stock'] = str(variant.get('inventory_quantity', 1000))
-
+            # variation['Stock'] = str(variant.get('inventory_quantity', 1000))
+            variation['Stock'] = 1000
             for i, option in enumerate(shopify_product.get('options', [])):
                 option_key = f"option{i + 1}"
                 if variant.get(option_key):
