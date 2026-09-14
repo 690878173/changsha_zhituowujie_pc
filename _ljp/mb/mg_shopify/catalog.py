@@ -309,6 +309,78 @@ class HeaderInlineMenuParser(BaseCatalogParser):
         return result
 
 
+class MainNavbarMegaMenuParser(CatalogParser):
+    """Parse server-rendered ``#main-navbar`` mega menus."""
+
+    def matches(self, html):
+        return 'id="main-navbar"' in html and '/collections/' in html
+
+    @staticmethod
+    def text(node):
+        return _clean_text(' '.join(node.xpath('.//text()[not(ancestor::svg)]')))
+
+    def _add_collection(self, nodes, link, collector, seen=None):
+        href = link.get('href') or ''
+        normalized = collector.normalize_url(href)
+        if not _is_collection_url(normalized):
+            return False
+        name = self.text(link) or link.get('aria-label') or ''
+        if not name or (seen is not None and normalized in seen):
+            return False
+        if collector.add_node(nodes, name, href) is None:
+            return False
+        if seen is not None:
+            seen.add(normalized)
+        return True
+
+    def parse(self, html, collector):
+        tree = lxml_html.fromstring(html)
+        navs = tree.xpath('//nav[@id="main-navbar"]')
+        if not navs:
+            raise RuntimeError('页面中未找到 #main-navbar 菜单')
+
+        result = {}
+        for top in navs[0].xpath('./ul/li'):
+            top_link = top.xpath('./a[@href][1]')
+            if not top_link:
+                continue
+            top_name = self.text(top_link[0])
+            if not top_name:
+                continue
+            children = {}
+            for group in top.xpath(
+                './/div[contains(concat(" ", normalize-space(@class), " "), " mega-menu ")]//ul'
+            ):
+                heading = group.xpath('./li[not(a)][1]/*[self::p or self::span]')
+                group_name = self.text(heading[0]) if heading else ''
+                group_children = {}
+                target = group_children if group_name else children
+                seen = set()
+                for link in group.xpath('./li/a[@href]'):
+                    self._add_collection(target, link, collector, seen)
+                if group_name and group_children:
+                    collector.add_node(children, group_name, '', group_children)
+            if children:
+                collector.add_node(result, top_name, '', children)
+            elif _is_collection_url(collector.normalize_url(top_link[0].get('href') or '')):
+                self._add_collection(result, top_link[0], collector)
+
+        other = {}
+        other_seen = set()
+        for link in tree.xpath('//a[@href]'):
+            if link.xpath('ancestor::nav'):
+                continue
+            self._add_collection(other, link, collector, other_seen)
+        if other:
+            other_name = 'Other'
+            while other_name in result:
+                other_name += '2'
+            collector.add_node(result, other_name, '', other)
+        if not result:
+            raise RuntimeError('页面中未找到可用集合目录')
+        return result
+
+
 class StandardStreamParser(BaseCatalogParser):
     """解析标准魔改 Shopify React 流菜单。"""
 
@@ -391,6 +463,7 @@ class CatCol(BaseCatCol):
     parser_types = (
         HeaderInlineMenuParser,
         HydrogenHeaderParser,
+        MainNavbarMegaMenuParser,
         NextNavigationParser,
         ByltStreamParser,
         StandardStreamParser,
@@ -405,6 +478,7 @@ __all__ = [
     'CatCol',
     'HeaderInlineMenuParser',
     'HydrogenHeaderParser',
+    'MainNavbarMegaMenuParser',
     'NextNavigationParser',
     'StandardStreamParser',
     'CatalogParser'

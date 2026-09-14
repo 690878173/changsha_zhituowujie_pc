@@ -287,7 +287,7 @@ class Get_Product(Base):
 
         self.result_queue.put(None)
         writer_thread.join()
-
+        self.tool.print(f'正在生成csv文件')
         all_rows = list(self._iter_all_product_rows())
 
         self.tool.File.save_csv(all_rows, self.output_ts_file, columns=self.fieldnames)

@@ -1,5 +1,6 @@
 from config import Tool, base_url
-from _ljp.mb.base.get_ml import BaseCatalogParser, CatCol
+
+from _ljp.mb.mg_shopify.catalog import BaseCatalogParser,CatCol,CatalogParser
 
 
 save_path = Tool.File.path_add_site('data/ml.json')
