@@ -99,7 +99,8 @@ class GetDetail(Base):
         # 失败不写缓存，下次重试
         if pagemodel.is_fail():
             return index_id, False, False, 0
-        product_urls = list(set(product_urls or []))
+        # Keep the source page order while removing duplicate detail URLs.
+        product_urls = list(dict.fromkeys(product_urls or []))
 
         if len(product_urls) == 0:
             self.Tool.print(f'url数量为0,{pagemodel.url}', color='yellow')
@@ -158,7 +159,12 @@ class GetDetail(Base):
 
             if _num % self.catch_save_num == 0:
                 self.save_catch()
+            current_url = pagemodel.url
             self.after_one_request(pagemodel)
+            # The default transition follows the parsed pagination link.  A
+            # site hook can still replace ``page.url`` for exceptional flows.
+            if pagemodel.url == current_url and pagemodel.next_url:
+                pagemodel.url = pagemodel.next_url
         self.save_catch()
 
 
@@ -231,4 +237,3 @@ class GetDetail(Base):
         self.Tool.print(f'执行关闭方法', color='cyan')
 
         self.close_playwright()
-

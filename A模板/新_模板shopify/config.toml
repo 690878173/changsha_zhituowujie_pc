@@ -13,5 +13,5 @@ images_split = ""
 custom_key = ""
 
 [request.browser]
-enabled = false
+enabled = true
 

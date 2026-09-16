@@ -557,7 +557,10 @@ URL，同时保留无 URL 的分组节点。普通 Shopify 支持
 提升一级，因此目录最多三级；导航栏之外的 collection 链接统一挂到自定义
 一级目录 `Other` 下）；
 魔改 Shopify 支持 `HeaderInlineMenuParser`、`HydrogenHeaderParser`、
-`NextNavigationParser`、`ByltStreamParser` 与 `StandardStreamParser`。后者
+`MainNavbarMegaMenuParser`、`NextNavigationParser`、`ByltStreamParser` 与
+`StandardStreamParser`。`MainNavbarMegaMenuParser` 解析服务端渲染的
+`nav#main-navbar` mega menu，保留带 `/collections/` 的菜单层级，并将导航外
+的 collection 链接挂到 `Other`（若已存在则使用 `Other2`）。后者
 递归处理 indexed React-stream 的子菜单项，兼容 `_321/_323` 与 `_320/_322`
 子列表布局。
 
@@ -576,9 +579,10 @@ CatCol(
 ).run()
 ```
 
-新增菜单结构时，从 `_ljp.mb.base.get_ml` 导入 `CatalogParser`，在对应站点
-`catalog.py` 新增直接继承它的具体解析器，并将该类加入该站点 `CatCol` 的
-`parser_types`。不要在模板脚本中复制解析逻辑。
+新增且可复用的菜单结构时，从 `_ljp.mb.base.get_ml` 导入 `CatalogParser`，在
+对应 `_ljp.mb.*.catalog` 新增直接继承它的具体解析器，并加入该包 `CatCol`
+的 `parser_types` 与公共导出；仅站点独有结构才在站点脚本中注册解析器。不要
+在模板脚本中复制已内置的解析逻辑。
 
 `_ljp.mb.base.step_get_detail.GetDetail` is the category/detail URL base and
 `_ljp.mb.base.step_get_product.Get_Product` is the product-detail base. Some
@@ -663,7 +667,7 @@ simple query-string formatter and does not URL-encode values.
 
 | Method | Contract |
 | --- | --- |
-| `Tool.to_ml_data(tree)` | Flattens nested `{url, child}` menu data to `{path: url}`; input must be a dictionary. |
+| `Tool.to_ml_data(tree)` | Flattens nested `{url, child}` menu data to `{path: url}`; hierarchy paths use comma-separated, parent-qualified names (for example `Root,Root Child`); input must be a dictionary. |
 | `Tool.to_ml_json(tree, path)` | Removes the configured `custom_key`, flattens with `to_ml_data`, and saves JSON. |
 | `Tool.clean_price(value)` | Stringifies and removes `$`, `/ea`, and `/EA`. |
 | `Tool.sort_data(mapping)` | Returns a new dict sorted by integer-convertible keys. |
@@ -729,15 +733,18 @@ page and `page.set_fail()` for a temporary failure. A failure is deliberately
 not cached. `build_params(page)` must return only values that affect the
 response; its result is included in the MD5 page-cache key. `before_request`
 is the place to compute stable per-category values such as an API base URL.
-The template does not convert arbitrary exceptions from `fetch_page` into a
-retry state; catch expected request/parser errors in the hook, log them, call
-`page.set_fail()`, and return an empty page result. Let programming errors
-surface during development.
+After each successful page, `GetDetail` advances `page.url` to the returned
+`next_url` by default. `after_one_request(page)` may replace `page.url` for a
+site-specific transition; it no longer needs to implement ordinary link
+pagination. The template does not convert arbitrary exceptions from
+`fetch_page` into a retry state; catch expected request/parser errors in the
+hook, log them, call `page.set_fail()`, and return an empty page result. Let
+programming errors surface during development.
 
 Output is again `{category: [detail_url, ...]}`. URLs are deduplicated per
-page and again while aggregating categories. The final aggregation follows
-category/page traversal order; do not rely on the exact order within a single
-page because the low-level page cache currently uses set-based deduplication.
+page and again while aggregating categories while retaining first-seen order.
+The final aggregation follows category/page traversal order, and each page
+retains the order returned by `fetch_page`.
 `skip_input_url_ls` skips source category URLs; `skip_output_url_ls` removes
 detail URLs from both page output and final aggregation. `ts_num` limits the
 number of input categories, not the number of products.
@@ -776,6 +783,13 @@ The current worker generates the shared product-cache ID from the URL (the
 model also accepts an optional category argument for compatibility). Category
 membership is stored separately in `catch`. Treat task IDs as opaque and use
 `catch`/`index` APIs rather than constructing IDs manually.
+
+Step4 exports rows in the order of the current input mapping: category order,
+then each category's URL-list order. Requests may complete in any order, and
+cache insertion order is deliberately not used for CSV ordering. All rows
+returned for one source URL remain contiguous; this keeps a product's parent
+and variation rows together. Reordering the input file changes the output
+order even when every product result already exists in cache.
 
 ## Standard Post-processing Steps
 

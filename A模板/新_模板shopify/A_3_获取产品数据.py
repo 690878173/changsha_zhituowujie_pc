@@ -59,7 +59,7 @@ cookies = {
 }
 
 if_wp = False
-time_sleep = 7
+time_sleep = 2
 
 from _ljp.mb.shopify import Get_Product
 
@@ -99,7 +99,10 @@ class Pc(Get_Product):
 
             #TODO 使用原url还是   p_url.replace('.json', '')
 
-            zdy_data = self.zdy_zd(url)
+            try:
+                zdy_data = self.zdy_zd(url)
+            except Exception as e:
+                raise ValueError(f'自定义字段获取失败:{e}')
 
             time.sleep(time_sleep)
 

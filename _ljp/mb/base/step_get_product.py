@@ -59,6 +59,10 @@ class Get_Product(Base):
 
         self.total_tasks = 0
         self.finished_count = 0
+        # Output order belongs to the current input mapping, not to cache or
+        # worker completion order.  Each entry is (source_order, category,
+        # source_url, cache_task_id).
+        self.ordered_tasks = []
         # URLs that missed the disk/in-memory cache and produced product rows this run.
         self.fetched_urls = []
 
@@ -115,12 +119,13 @@ class Get_Product(Base):
         self.cache_changes_since_save += 1
 
     @staticmethod
-    def _clone_with_category(rows, category):
-        """复用同一 url 解析结果，替换分类名称"""
+    def _clone_with_category(rows, category, source_url=''):
+        """复用同一 url 解析结果，替换分类名称并保留调试来源 URL。"""
         result = []
         for row in rows:
             new_row = dict(row).copy()
             new_row['Categories'] = category
+            new_row.setdefault('url', source_url)
             result.append(new_row)
         return result
 
@@ -144,7 +149,10 @@ class Get_Product(Base):
         """Queue standard ``{category: [url]}`` tasks for the shared cache flow."""
         if not isinstance(data, dict):
             raise TypeError("Step4 input must be a category-to-URL mapping")
-        seq_id = 0
+        task_count = 0
+        source_order = 0
+        self.ordered_tasks = []
+        ordered_task_keys = set()
 
         for category, urls in data.items():
             if not isinstance(urls, (list, tuple)):
@@ -153,10 +161,15 @@ class Get_Product(Base):
 
                 if url in self.skip_input_url_ls:
                     continue
-                seq_id += 1
+                task_count += 1
 
                 # 同一个 URL 不同分类共用一份商品解析结果。
                 task_id = self._generate_task_id(url)
+                task_key = (category, task_id)
+                if task_key not in ordered_task_keys:
+                    self.ordered_tasks.append((source_order, category, url, task_id))
+                    ordered_task_keys.add(task_key)
+                    source_order += 1
                 if self.index.check(url, task_id):
                     # 直接交给 writer_worker 记录分类任务。
                     with self.global_lock:
@@ -166,13 +179,13 @@ class Get_Product(Base):
                     self.result_queue.put((task_id, category, url, [], False))
                 else:
                     # 未命中，交给请求线程池去抓取
-                    self.task_queue.put((str(task_id ), category, url))
+                    self.task_queue.put((task_id, category, url))
 
-                if isinstance(self.ts_num, int) and seq_id >= self.ts_num:
+                if isinstance(self.ts_num, int) and task_count >= self.ts_num:
                     self.Tool.print(f'启用测试模式，限制任务数:{self.ts_num}')
-                    self.total_tasks = seq_id
+                    self.total_tasks = task_count
                     return
-        self.total_tasks = seq_id
+        self.total_tasks = task_count
 
     def request_worker(self):
         try:
@@ -180,19 +193,19 @@ class Get_Product(Base):
                 if self.should_stop_requests():
                     break
                 try:
-                    seq_id, category, url = self.task_queue.get_nowait()
+                    task_id, category, url = self.task_queue.get_nowait()
                 except Empty:
                     break
 
                 # 同一 URL 可能属于多个分类，避免并发线程重复请求。
                 with self._get_url_lock(url):
-                    cached_data = self.index.check(url, seq_id)
+                    cached_data = self.index.check(url, task_id)
                     if cached_data:
                         with self.global_lock:
-                            if seq_id not in self.catch.check(category):
-                                self.catch.append(category, seq_id, url)
+                            if task_id not in self.catch.check(category):
+                                self.catch.append(category, task_id, url)
                                 self._mark_cache_changed()
-                        self.result_queue.put((seq_id, category, url, [], False))
+                        self.result_queue.put((task_id, category, url, [], False))
                         continue
 
                     data = []
@@ -205,17 +218,17 @@ class Get_Product(Base):
 
                         # 立即写入 DetailIndex 的内存数据，供同 URL 的其他线程复用。
                         with self.global_lock:
-                            self.index.append(seq_id, url, data)
+                            self.index.append(task_id, url, data)
                             self.fetched_urls.append(url)
                             self._mark_cache_changed()
 
                     except Exception as e:
                         is_failed = True
-                        self.Tool.print(f"【任务失败】seq:{seq_id} url:{url} error:{e}")
+                        self.Tool.print(f"【任务失败】task:{task_id} url:{url} error:{e}")
                         with self.global_lock:
                             self.failures.setdefault(category, []).append(url)
 
-                    self.result_queue.put((seq_id, category, url, data, is_failed))
+                    self.result_queue.put((task_id, category, url, data, is_failed))
         finally:
             self.close_playwright()
 
@@ -225,16 +238,16 @@ class Get_Product(Base):
             if item is None:
                 break
 
-            seq_id, category, url, data, is_failed = item
+            task_id, category, url, data, is_failed = item
             self.result_queue.task_done()
 
             fetched_this_run = False
             if not is_failed:
                 with self.global_lock:
                     fetched_this_run = bool(data)
-                    data = data or self.index.check(url, seq_id) or []
-                    if seq_id not in self.catch.check(category):
-                        self.catch.append(category, seq_id, url)
+                    data = data or self.index.check(url, task_id) or []
+                    if task_id not in self.catch.check(category):
+                        self.catch.append(category, task_id, url)
                         self._mark_cache_changed()
 
             with self.global_lock:
@@ -264,10 +277,16 @@ class Get_Product(Base):
             return True
 
     def _iter_all_product_rows(self):
-        for category, task_data in self.catch.data.items():
-            for task_id, task in task_data.items():
-                data = self.index.check(task['url'], task_id) or []
-                yield from self._clone_with_category(data, category)
+        """Yield cached product rows in the current input-file order.
+
+        ``Catch`` is written by concurrent workers and is therefore a cache
+        membership record, not an ordering source.  Rebuilding this iterator
+        from ``ordered_tasks`` also makes a cache-only run honor a newly
+        reordered detail-url input file.
+        """
+        for _, category, source_url, task_id in self.ordered_tasks:
+            data = self.index.check(source_url, task_id) or []
+            yield from self._clone_with_category(data, category, source_url)
 
     def run(self):
         self.load_tasks()
