@@ -30,6 +30,7 @@ class Get_Product(Base):
                  fieldnames=None,
                  max_threads=5,
                  retry_failed_tasks=True,
+                 validata=True
                  ):
         self.tool = tool
         self.Tool = tool
@@ -81,6 +82,8 @@ class Get_Product(Base):
         self.global_lock = threading.Lock()
         self.url_locks = {}
         self.url_locks_lock = threading.Lock()
+
+        self.validata = validata
 
         self._init()
 
@@ -315,7 +318,8 @@ class Get_Product(Base):
                         data = self._normalize_products(parse_result)
                         if not data:
                             raise ValueError('商品解析结果为空，不写入缓存，将在下次运行时重试。')
-                        self._validate_rows_before_cache(data)
+                        if self.validata:
+                            self._validate_rows_before_cache(data)
 
                         # 立即写入 DetailIndex 的内存数据，供同 URL 的其他线程复用。
                         with self.global_lock:
