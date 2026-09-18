@@ -1,0 +1,23 @@
+[site]
+base_url = "https://www.conair.com"
+site = "conair"
+site_type = ""
+zk = 0.3
+
+[request]
+max_retry = 3
+time_out = 30
+headers = ""
+cookies = ""
+images_split = ","
+custom_key = ""
+
+[request.browser]
+enabled = true
+backend = "playwright"
+headless = false
+context_count = 1
+block_images = true
+stable_wait_ms = 800
+timeout = 15000
+network_idle_timeout = 3000
