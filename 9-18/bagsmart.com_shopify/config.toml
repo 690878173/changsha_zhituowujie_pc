@@ -1,0 +1,23 @@
+[site]
+base_url = "https://www.bagsmart.com"
+site = "bagsmart.com"
+site_type = "shopify"
+zk = 0.3
+
+[request]
+max_retry = 3
+time_out = 30
+headers = ""
+cookies = ""
+images_split = ""
+custom_key = ""
+
+[request.browser]
+enabled = true
+backend = "playwright"
+headless = false
+block_images = true
+block_resource_types = ["font", "media"]
+stable_wait_ms = 1000
+timeout = 60000
+

@@ -1,0 +1,63 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Crawler runtime artifacts
+临时文件夹/
+data/
+res/
+fwq/
+fail/
+hc/
+cache/
+caches/
+debug/
+logs/
+o_data/
+s_data/
+output/
+outputs/
+downloads/
+html/
+json/
+images/
+temp/
+tmp/
+
+# Generated exports, page snapshots, and downloaded media
+*.csv
+*.json
+*.jsonl
+*.html
+*.webp
+*.log
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.sqlite
+*.sqlite3
+*.db
+*.xlsx
+*.xls
+*.parquet
+
+# Keep project configuration and package metadata even when JSON-based.
+!config*.json
+!*config*.json
+!package.json
+!package-lock.json
+!tsconfig*.json
+!*.config.json
+!*.schema.json
+
+# Generated failure reports
+failed_images.txt

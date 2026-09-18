@@ -1,0 +1,17 @@
+[site]
+base_url = "https://warmies.com"
+site = "warmies"
+site_type = "shopify"
+zk = 0.3
+
+[request]
+max_retry = 3
+time_out = 30
+headers = ""
+cookies = ""
+images_split = ""
+custom_key = ""
+
+[request.browser]
+enabled = false
+

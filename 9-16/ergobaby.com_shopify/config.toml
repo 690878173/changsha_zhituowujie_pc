@@ -1,0 +1,23 @@
+[site]
+base_url = "https://ergobaby.com/en-us"
+site = "ergobaby"
+site_type = "shopify"
+zk = 0.3
+
+[request]
+max_retry = 3
+time_out = 30
+headers = ""
+cookies = ""
+images_split = ""
+custom_key = ""
+
+[request.browser]
+enabled = true
+backend = "playwright"
+headless = false
+context_count = 1
+block_images = true
+stable_wait_ms = 1500
+timeout = 60000
+

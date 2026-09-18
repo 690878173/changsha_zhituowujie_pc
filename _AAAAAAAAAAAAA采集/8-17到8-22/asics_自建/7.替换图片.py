@@ -1,0 +1,24 @@
+from config import Tool
+
+csv_input_path = Tool.File.path_add_site(r'fwq/variable.csv')
+csv_output_path = Tool.File.path_add_site(r'res/picture.csv')
+
+from _ljp.mb.zj import Replace_imgs
+
+
+
+class Pc(Replace_imgs):
+
+
+    def build_new_url_base(self):
+        web_name = self.Tool.site + "_ljp"
+        return f"https://cdn.zhimatrix.com/{web_name}/images/"
+
+
+
+
+
+if __name__ == '__main__':
+    Pc(tool=Tool,input_path=csv_input_path,output_path=csv_output_path).run()
+
+

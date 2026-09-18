@@ -1,0 +1,59 @@
+一级:Shop -> http://getcasely.com/collections/all
+  二级:New Arrivals -> http://getcasely.com/collections/whats-new
+  二级:Best Sellers -> http://getcasely.com/collections/best-sellers
+  二级:Laptop Shells -> http://getcasely.com/collections/laptop-shells
+  二级:Personalizable Cases -> http://getcasely.com/collections/personalizable-patterns
+  二级:Bundles -> https://www.getcasely.com/discount/BUNDLE30?redirect=%2Fpages%2Fbundles
+  二级:Sale -> http://getcasely.com/collections/sale-phone-cases
+一级:Cases -> http://getcasely.com/collections/phone-cases
+  二级(含三级):iPhone Cases -> http://getcasely.com/collections/iphone-cases (三级32项)
+  二级(含三级):Samsung Cases -> http://getcasely.com/collections/samsung-galaxy-phone-cases (三级18项)
+  二级(含三级):Google Cases -> http://getcasely.com/collections/google-pixel-cases (三级15项)
+  二级(含三级):Laptop Cases -> http://getcasely.com/collections/laptop-cases (三级6项)
+  二级(含三级):iPad Cases -> http://getcasely.com/collections/ipad-cases (三级5项)
+  二级(含三级):Kindle Cases -> http://getcasely.com/collections/kindle-cases (三级4项)
+  二级(含三级):AirPods Cases -> http://getcasely.com/collections/airpods-cases (三级5项)
+  二级:Personalizable -> http://getcasely.com/collections/personalizable-patterns
+  二级:Afterglow Collection -> http://getcasely.com/collections/wild-tropics
+  二级:Poolside Prints -> http://getcasely.com/collections/poolside-prints
+  二级:East Coast Summer -> http://getcasely.com/collections/east-coast-summer-collection
+  二级:Clear -> https://www.getcasely.com/collections/clear-iphone-cases?filters=Case+type,Clear,Case+type,Clear+++MagSafe%C2%AE
+  二级:Solid Colors -> http://getcasely.com/collections/solid-colored-cases
+  二级:Floral -> http://getcasely.com/collections/floral-phone-cases
+  二级:Animal Print -> http://getcasely.com/collections/animal-print-phone-cases
+  二级:Festival -> http://getcasely.com/collections/festival-shop
+  二级:Bridal -> http://getcasely.com/collections/the-bachelorette-edit
+  二级:Shimmer -> http://getcasely.com/collections/shimmer-phone-cases
+  二级:Marble -> http://getcasely.com/collections/marble-phone-cases
+  二级:Holographic -> http://getcasely.com/collections/holographic-phone-cases
+  二级:Plaid -> http://getcasely.com/collections/plaid
+  二级:Tie Dye -> http://getcasely.com/collections/tie-dye-phone-cases
+  二级:Unisex -> http://getcasely.com/collections/mens-phone-cases
+一级:MagSafe -> http://getcasely.com/collections/magsafe-accessories
+  二级:Grippy | Suction Phone Mounts -> http://getcasely.com/collections/grippy
+  二级:MagSafe Wallets -> http://getcasely.com/collections/magsafe-wallets
+  二级:MagRings -> http://getcasely.com/collections/magnetic-phone-rings
+  二级:Power Pods -> http://getcasely.com/collections/power-pods
+一级:Accessories -> http://getcasely.com/collections/accessories
+  二级:Glass Screen Protectors -> http://getcasely.com/collections/glass-screen-protector
+  二级:Chargers -> http://getcasely.com/collections/charging-accessories
+  二级:Phone Wallets -> http://getcasely.com/collections/phone-case-wallet
+  二级:Phone Chains -> http://getcasely.com/collections/phone-chains
+  二级:Phone Rings -> http://getcasely.com/collections/phone-rings
+  二级:Phone Loops -> http://getcasely.com/collections/phone-loops
+  二级:Cloud Carryall Bags -> http://getcasely.com/collections/cloud-carryall-laptop-bags
+  二级:AirPods Max Cases -> http://getcasely.com/collections/airpods-max-cases
+  二级:Waterproof Phone Pouches -> http://getcasely.com/collections/aquabuddy-waterproof-phone-pouches
+一级:Collabs -> http://getcasely.com/collections/collabs
+  二级:Love Island -> http://getcasely.com/collections/love-island-x-casely
+  二级:Van Gogh Museum -> http://getcasely.com/collections/van-gogh-museum-collection
+  二级:Jenna Palek -> http://getcasely.com/collections/the-keepsake-collection-by-jenna-palek
+  二级:Pura Vida -> http://getcasely.com/collections/pura-vida-phone-cases
+  二级:The Beatles -> http://getcasely.com/collections/the-beatles
+  二级:Crayola -> http://getcasely.com/collections/crayola-phone-cases
+  二级:Grateful Dead -> http://getcasely.com/collections/grateful-dead-cases
+  二级:The Met -> http://getcasely.com/collections/the-met
+  二级:Frida Kahlo -> http://getcasely.com/collections/frida-kahlo-phone-cases
+  二级:Kitty and Vibe -> http://getcasely.com/collections/casely-x-kitty-and-vibe
+  二级:Artist Spotlight -> http://getcasely.com/collections/artist-phone-cases
+  二级:All Collaborations -> http://getcasely.com/collections/limited-edition

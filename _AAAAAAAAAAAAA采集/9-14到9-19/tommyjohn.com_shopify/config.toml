@@ -1,0 +1,17 @@
+[site]
+base_url = "https://tommyjohn.com"
+site = "tommyjohn.com"
+site_type = "shopify"
+zk = 0.3
+
+[request]
+max_retry = 3
+time_out = 30
+headers = ""
+cookies = ""
+images_split = ""
+custom_key = "tommyjohn_custom"
+
+[request.browser]
+enabled = false
+

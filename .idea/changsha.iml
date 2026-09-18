@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="PYTHON_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/装修/data" />
+      <excludeFolder url="file://$MODULE_DIR$/装修/data/原始模板" />
+      <excludeFolder url="file://$MODULE_DIR$/装修/data/导出模板" />
+      <excludeFolder url="file://$MODULE_DIR$/装修/data/导出模板2" />
+      <excludeFolder url="file://$MODULE_DIR$/装修/data/导出模板2_1" />
+      <excludeFolder url="file://$MODULE_DIR$/8-10到8-15/hoka_自建/hc" />
+      <excludeFolder url="file://$MODULE_DIR$/8-10到8-15/hoka_自建/hc/2" />
+      <excludeFolder url="file://$MODULE_DIR$/8-10到8-15/hoka_自建/hc/3" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-10到8-15" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-17到8-22" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-24到8-29" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-3之前" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-3到8-8" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-7到9-14" />
+      <excludeFolder url="file://$MODULE_DIR$/9-10" />
+      <excludeFolder url="file://$MODULE_DIR$/9-11" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-17到8-22/bandolierstyle_shopify" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-17到8-22/blackgirlsunscreen_自建站_更新数据" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-17到8-22/patagonia_自建" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-24到8-29/huckberry_自建" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/cricut.com_自建" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/kuiu_自建" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/mugsyjeans_target" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/pourri_shopify" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/salomon_自建" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/turtleboxaudio_shopify" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/vanicream_target" />
+      <excludeFolder url="file://$MODULE_DIR$/9-16" />
+      <excludeFolder url="file://$MODULE_DIR$/9-17/clorox_target/html" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-7到9-12" />
+    </content>
+    <content url="file://$MODULE_DIR$/8-10到8-15/hoka_自建/hc/3" />
+    <content url="file://$MODULE_DIR$/9-16/chubbiesshorts_魔改shopify" />
+    <content url="file://$MODULE_DIR$/9-16/samsonite.com_自建" />
+    <content url="file://$MODULE_DIR$/9-16/verbproducts.com_shopify" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-17到8-22/bandolierstyle_shopify" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-17到8-22/blackgirlsunscreen_自建站_更新数据" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-17到8-22/patagonia_自建" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-24到8-29/govee_亚马逊" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-24到8-29/huckberry_自建" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/cricut.com_自建" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/gocontigo_亚马逊" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/kuiu_自建" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/mugsyjeans_target" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/pourri_shopify" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/salomon_自建" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/turtleboxaudio_shopify" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/vanicream_target" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-3到8-8/lumedeodorant" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-7到9-12/summerfridays_shopify" />
+    <orderEntry type="jdk" jdkName="uv (changsha)" jdkType="Python SDK" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

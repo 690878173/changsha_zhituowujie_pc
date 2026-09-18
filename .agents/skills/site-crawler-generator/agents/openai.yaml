@@ -1,0 +1,6 @@
+interface:
+  display_name: "站点采集模板生成器"
+  short_description: "按站点类型生成采集流水线并分析自定义字段"
+  default_prompt: "Use $site-crawler-generator to generate and validate a site crawler template for the named site and type."
+policy:
+  allow_implicit_invocation: true

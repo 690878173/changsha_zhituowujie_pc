@@ -1,0 +1,32 @@
+from config import Tool
+
+# ================= 维护区：自定义字段写在这里 =================
+EXTRA_META_COLUMNS = [
+    'Description(product.metafields.c_f.description)',
+    'Whats Included(product.metafields.c_f.whats_included)',
+    'Tech Specs(product.metafields.c_f.tech_specs)',
+    'Vibration Solution(product.metafields.c_f.vibration_solution)',
+]
+
+input_csv = Tool.File.path_add_site(r"res/picture.csv")
+output_csv = Tool.File.path_add_site(r"data/wp_to_shopify.csv")
+
+# =============================================================
+
+from _ljp.mb.shopify import WpToShopify
+
+
+
+class Pc(WpToShopify):
+    EXTRA_META_COLUMNS = EXTRA_META_COLUMNS
+
+
+pc = Pc(Tool, input_csv, output_csv)
+
+if __name__ == '__main__':
+    pc.run()
+
+
+
+
+
