@@ -6,7 +6,7 @@ extra_meta_columns = []
 
 
 input_csv = Tool.File.path_add_site(r"res/picture.csv")
-output_csv = Tool.File.path_add_site(r"data/wp_to_shopify.csv")
+output_csv = Tool.File.path_add_site(r"res/wp_to_shopify.csv")
 
 if __name__ == "__main__":
     step = WpToShopify(Tool)

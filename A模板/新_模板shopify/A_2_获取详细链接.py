@@ -1,4 +1,5 @@
 import time
+from urllib.parse import urlsplit, urlunsplit
 
 from config import Tool
 from _ljp.mb.model import Base, PageModel
@@ -28,12 +29,17 @@ from _ljp.mb.shopify import GetDetail
 
 class Pc(GetDetail):
 
+    @staticmethod
+    def build_collection_products_api_url(collection_url: str) -> str:
+        """Append ``/products.json`` to a collection path without losing filters."""
+        parts = urlsplit(collection_url.strip())
+        path = f"{parts.path.rstrip('/')}/products.json"
+        return urlunsplit((parts.scheme, parts.netloc, path, parts.query, ''))
 
     def before_request(self, p: PageModel):
         url = p.url
-        clean_url = url.strip().rstrip('/')
-        api_url = f"{clean_url}/products.json"
-        base_domain = Tool.URL.get_base_domain(clean_url)
+        api_url = self.build_collection_products_api_url(url)
+        base_domain = Tool.URL.get_base_domain(url)
 
         p.extra['before_request'] = {
             'api_url': api_url,

@@ -1,3 +1,4 @@
+from copy import deepcopy
 import json
 import re
 from pathlib import Path
@@ -29,6 +30,7 @@ class HTML:
     TEXT_FIELD_ALLOW_TAGS = frozenset({
         'p', 'br', 'ul', 'ol', 'li', 'strong', 'b', 'em', 'i',
     })
+    TEXT_FIELD_BLOCK_TAGS = frozenset({'p', 'ul', 'ol', 'li'})
     _RAW_URL_RE = re.compile(r"https?://[^\s\"'<>]+")
     _EMPTY_TEXT_TAG_RE = re.compile(r'<(p|li|ul|ol|strong|b|em|i)>\s*</\1>', re.I)
     _BR_TAG_RE = re.compile(r'<br\s*/?>', re.I)
@@ -259,9 +261,13 @@ class HTML:
         if tree is None or not isinstance(tree, etree._Element):
             return ""
 
+        # Cleaning rewrites element tags, so leave a caller's source tree intact.
+        tree = deepcopy(tree)
+
         # Matches the absorbed script policy: discard dangerous block content,
         # then unwrap every remaining tag outside the explicit rich-text list.
         etree.strip_elements(tree, *cls.TEXT_FIELD_DROP_TAGS)
+        cls._promote_text_divs_to_paragraphs(tree)
         unsupported_tags = {
             element.tag
             for element in tree.iter()
@@ -274,12 +280,73 @@ class HTML:
         HTML.strip_all_attrs(tree)
         body = tree.find(".//body")
         root = body if body is not None else tree
+        cls._wrap_root_inline_content(root)
         inner = [root.text or '']
         for child in root:
             inner.append(etree.tostring(child, encoding='unicode', method='html', with_tail=False))
             if child.tail:
                 inner.append(child.tail)
         return cls._normalize_clean_html(''.join(inner))
+
+    @classmethod
+    def _wrap_root_inline_content(cls, root):
+        """Wrap top-level text and inline elements in paragraphs for rich-text output."""
+        children = list(root)
+        if not root.text and not any(
+            child.tail
+            or (
+                isinstance(child.tag, str)
+                and child.tag.lower() not in cls.TEXT_FIELD_BLOCK_TAGS
+            )
+            for child in children
+        ):
+            return
+
+        output = []
+        paragraph = None
+
+        def ensure_paragraph():
+            nonlocal paragraph
+            if paragraph is None:
+                paragraph = etree.Element('p')
+                output.append(paragraph)
+            return paragraph
+
+        def add_text(value):
+            if not value or not value.strip():
+                return
+            target = ensure_paragraph()
+            if len(target):
+                target[-1].tail = (target[-1].tail or '') + value
+            else:
+                target.text = (target.text or '') + value
+
+        add_text(root.text)
+        root.text = None
+        for child in children:
+            tail = child.tail
+            child.tail = None
+            root.remove(child)
+            tag = child.tag.lower() if isinstance(child.tag, str) else ''
+            if tag in cls.TEXT_FIELD_BLOCK_TAGS:
+                paragraph = None
+                output.append(child)
+            else:
+                ensure_paragraph().append(child)
+            add_text(tail)
+        root[:] = output
+
+    @classmethod
+    def _promote_text_divs_to_paragraphs(cls, tree):
+        """Preserve paragraph boundaries from nested text-only ``div`` elements."""
+        for div in reversed(tree.xpath('//div')):
+            has_rich_text_block = any(
+                isinstance(descendant.tag, str)
+                and descendant.tag.lower() in cls.TEXT_FIELD_BLOCK_TAGS
+                for descendant in div.iterdescendants()
+            )
+            if not has_rich_text_block:
+                div.tag = 'p'
 
     @classmethod
     def _normalize_clean_html(cls, value: str) -> str:

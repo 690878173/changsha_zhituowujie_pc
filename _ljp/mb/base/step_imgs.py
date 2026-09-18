@@ -29,6 +29,54 @@ class Replace_imgs:
     def hash_image_url(image_url):
         return f"{hashlib.md5(image_url.encode('utf-8')).hexdigest()}.webp"
 
+    @staticmethod
+    def _field_value(row, column):
+        value = row.get(column, "")
+        return "" if pd.isna(value) else str(value).strip()
+
+    @classmethod
+    def reverse_product_families(cls, df):
+        """Reverse product blocks while retaining each variable family intact."""
+        required = {"Type", "SKU", "Parent"}
+        if not required.issubset(df.columns):
+            return df.copy()
+
+        blocks = []
+        index = 0
+        while index < len(df):
+            row = df.iloc[index]
+            product_type = cls._field_value(row, "Type").lower()
+
+            if product_type == "variable":
+                parent_sku = cls._field_value(row, "SKU")
+                if not parent_sku:
+                    raise ValueError(f"第 {index + 1} 行 variable 商品缺少 SKU")
+
+                end = index + 1
+                while end < len(df):
+                    child = df.iloc[end]
+                    if (
+                        cls._field_value(child, "Type").lower() != "variation"
+                        or cls._field_value(child, "Parent") != parent_sku
+                    ):
+                        break
+                    end += 1
+
+                blocks.append(df.iloc[index:end])
+                index = end
+                continue
+
+            if product_type == "variation":
+                raise ValueError(
+                    f"第 {index + 1} 行 variation 商品未紧跟其父商品: "
+                    f"Parent={cls._field_value(row, 'Parent')!r}"
+                )
+
+            blocks.append(df.iloc[index:index + 1])
+            index += 1
+
+        return pd.concat(reversed(blocks), ignore_index=True) if blocks else df.copy()
+
     def to_new_url(self, image_urls, failed_set):
         """将单个单元格内多个 url 转为新链接，跳过失败图片"""
         if pd.isna(image_urls) or str(image_urls).strip() == "":
@@ -104,6 +152,7 @@ class Replace_imgs:
 
     def run(self):
         df = pd.read_csv(self.input_path)
+        df = self.reverse_product_families(df)
         failed_set = self.load_failed_images()
 
         df["Images"] = df["Images"].apply(lambda x: self.to_new_url(x, failed_set))

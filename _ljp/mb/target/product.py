@@ -7,6 +7,7 @@ import html as html_parser
 import threading
 from pathlib import Path
 from queue import Queue
+from urllib.parse import urljoin
 
 from DrissionPage import ChromiumPage, ChromiumOptions
 
@@ -61,11 +62,58 @@ class Get_Product(BaseStep4):
             self._variant_cache = {}
 
     @staticmethod
-    def _has_price(value):
-        return value is not None and bool(str(value).strip())
+    def _has_text(value):
+        """Reject blank and parser-placeholder values for required fields."""
+        if value is None or isinstance(value, bool):
+            return False
+        normalized = re.sub(r"<[^>]+>", " ", str(value))
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        return bool(normalized) and normalized.casefold() not in {
+            "n/a", "na", "nan", "none", "null", "undefined", "unknown", "not available",
+            "target product",
+        }
+
+    def _validate_product_rows(self, rows):
+        """Apply Target-specific price and variation checks before Step4's cache gate."""
+        if not isinstance(rows, list) or not rows:
+            raise ValueError("商品没有可写入缓存的数据行")
+
+        for position, row in enumerate(rows, start=1):
+            if not isinstance(row, dict):
+                raise ValueError(f"商品第 {position} 行不是字典")
+
+            product_type = str(row.get("Type") or "simple").strip().casefold()
+            if product_type not in {"simple", "variable", "variation"}:
+                raise ValueError(f"商品第 {position} 行 Type 无效: {row.get('Type')!r}")
+
+            if product_type != "variable":
+                invalid_prices = [
+                    label
+                    for label in ("Sale price", "Regular price")
+                    if not self._has_positive_price(row.get(label))
+                ]
+                if invalid_prices:
+                    raise ValueError(
+                        f"商品第 {position} 行价格无效，未写入商品缓存；缺少或非正数: "
+                        + ", ".join(invalid_prices)
+                    )
+            if product_type == "variation":
+                if not self._has_text(row.get("Parent")):
+                    raise ValueError(f"变体第 {position} 行缺少 Parent，未写入商品缓存")
+                attribute_names = [
+                    key for key in row if re.fullmatch(r"Attribute \d+ name", key)
+                ]
+                if not attribute_names:
+                    raise ValueError(f"变体第 {position} 行缺少属性，未写入商品缓存")
+                for name_key in attribute_names:
+                    value_key = name_key.replace(" name", " value(s)")
+                    if not self._has_text(row.get(name_key)) or not self._has_text(row.get(value_key)):
+                        raise ValueError(
+                            f"变体第 {position} 行属性不完整，未写入商品缓存: {name_key}"
+                        )
 
     def _cached_variant_data(self, url, expected_tcins):
-        """Return cached purchasable and out-of-stock variant states."""
+        """Return only cached variants that already have a usable price."""
         with self._variant_cache_lock:
             entry = self._variant_cache.get(url, {})
             variants = entry.get("variants", {}) if isinstance(entry, dict) else {}
@@ -77,10 +125,7 @@ class Get_Product(BaseStep4):
                 for tcin, data in variants.items()
                 if str(tcin) in expected_tcins
                 and isinstance(data, dict)
-                and (
-                    self._has_price(data.get("price"))
-                    or data.get("stock") == 0
-                )
+                and self._has_positive_price(data.get("price"))
             }
 
     def _save_variant_cache_locked(self):
@@ -88,8 +133,8 @@ class Get_Product(BaseStep4):
         self._variant_cache_changes_since_save = 0
 
     def _cache_variant_price(self, url, tcin, price, stock=None):
-        """Persist each successful or known-out-of-stock variant immediately."""
-        if not self._has_price(price) and stock != 0:
+        """Persist a variant checkpoint only after its price is known."""
+        if not self._has_positive_price(price):
             return
         data = {"price": price}
         if stock is not None:
@@ -138,12 +183,15 @@ class Get_Product(BaseStep4):
             self.Tool.print(f"保存调试 HTML 失败: {exc}", color="yellow")
 
     def init(self,proxy="127.0.0.1:7897", headless=False, wait_time=15,
-                 num_threads=3, max_wait_price=12):
+                 num_threads=3, max_wait_price=12, variant_attempts=1,
+                 variant_wait_seconds=8):
         self.proxy = proxy
         self.headless = headless
         self.wait_time = wait_time  # 初始页面加载等待（秒）
         self.max_wait_price = max_wait_price  # 智能等待价格元素出现的最长时间（秒）
         self.num_threads = num_threads  # 并行标签页数量
+        self.variant_attempts = max(1, int(variant_attempts))
+        self.variant_wait_seconds = max(1, float(variant_wait_seconds))
 
 
         self.browser = self._create_browser()
@@ -208,13 +256,19 @@ class Get_Product(BaseStep4):
         check_js = """
             var el = document.querySelector('[data-test="product-price"]') ||
                      document.querySelector('[data-test="price"]') ||
+                     document.querySelector('[data-test*="product-price" i]') ||
+                     document.querySelector('[data-test*="current-price" i]') ||
+                     document.querySelector('[data-test*="price" i]') ||
                      document.querySelector('[class*="currentPriceFontSize"]') ||
                      document.querySelector('[class*="currentPrice"]');
             if (el && el.innerText.trim().match(/\\$[\\d,]+\\.?\\d*/)) return true;
             // 回退：检查任何含$价格的元素
-            var allEls = document.querySelectorAll('[class*="price"], [class*="Price"]');
+            var allEls = document.querySelectorAll(
+                '[data-test*="price" i], [class*="price"], [class*="Price"], [aria-label*="price" i]'
+            );
             for (var i = 0; i < allEls.length; i++) {
-                var t = allEls[i].innerText.trim();
+                var t = (allEls[i].innerText || allEls[i].textContent ||
+                    allEls[i].getAttribute('aria-label') || '').trim();
                 if (t.match(/\\$[\\d,]+\\.?\\d*/) &&
                     !t.toLowerCase().includes('was') &&
                     !t.toLowerCase().includes('save')) return true;
@@ -222,7 +276,7 @@ class Get_Product(BaseStep4):
             return false;
         """
         elapsed = 0
-        interval = 0.5
+        interval = 0.4
         while elapsed < timeout:
             try:
                 ready = page.run_js(check_js)
@@ -304,29 +358,41 @@ class Get_Product(BaseStep4):
         for attempt in range(retry):
             try:
                 result = page.run_js("""
-                    var priceEl = document.querySelector('[data-test="product-price"]');
-                    if (!priceEl) priceEl = document.querySelector('[data-test="price"]');
-                    if (!priceEl) {
-                        priceEl = document.querySelector('[class*="currentPriceFontSize"]') ||
-                                  document.querySelector('[class*="currentPrice"]');
+                    function visible(el) {
+                        var style = window.getComputedStyle(el);
+                        var rect = el.getBoundingClientRect();
+                        return style.display !== 'none' && style.visibility !== 'hidden' &&
+                            rect.width > 0 && rect.height > 0;
                     }
-                    if (!priceEl) {
-                        var allEls = document.querySelectorAll('[class*="price"], [class*="Price"]');
-                        for (var i = 0; i < allEls.length; i++) {
-                            var t = allEls[i].innerText.trim().toLowerCase();
-                            if (t && t.match(/\\$[\\d,]+\\.?\\d*/) &&
-                                !t.includes('was') && !t.includes('reg ') &&
-                                !t.includes('regular') && !t.includes('original') &&
-                                !t.includes('save') && !t.includes('range')) {
-                                priceEl = allEls[i];
-                                break;
-                            }
-                        }
-                    }
-                    if (priceEl) {
-                        var text = priceEl.innerText.trim();
+                    function priceFrom(el) {
+                        if (!el || !visible(el)) return null;
+                        var text = (el.innerText || el.textContent ||
+                            el.getAttribute('aria-label') || '').trim();
+                        var lower = text.toLowerCase();
+                        if (lower.includes('was') || lower.includes('reg ') ||
+                            lower.includes('regular') || lower.includes('original') ||
+                            lower.includes('save') || lower.includes('range')) return null;
                         var match = text.match(/\\$([\\d,]+\\.?\\d*)/);
-                        if (match) return match[1].replace(',', '');
+                        return match ? match[1].replace(',', '') : null;
+                    }
+                    var selectors = [
+                        '[data-test="product-price"]',
+                        '[data-test="price"]',
+                        '[data-test*="product-price" i]',
+                        '[data-test*="current-price" i]',
+                        '[data-test*="price" i]',
+                        '[class*="currentPriceFontSize"]',
+                        '[class*="currentPrice"]',
+                        '[class*="price"]',
+                        '[class*="Price"]',
+                        '[aria-label*="price" i]'
+                    ];
+                    for (var selector of selectors) {
+                        var candidates = document.querySelectorAll(selector);
+                        for (var i = 0; i < candidates.length; i++) {
+                            var price = priceFrom(candidates[i]);
+                            if (price) return price;
+                        }
                     }
                     return null;
                 """)
@@ -406,6 +472,7 @@ class Get_Product(BaseStep4):
                     result.push({
                         text: rawValue.replace(/[ ]*-[ ]*out of stock[ ]*$/i, '').trim(),
                         name: parts[0] || '',
+                        href: btn.getAttribute('href') || '',
                         selected: isSelected,
                         disabled: btn.disabled,
                         out_of_stock: isOutOfStock
@@ -420,15 +487,50 @@ class Get_Product(BaseStep4):
         return []
 
     def _get_current_tcin_from_url(self, page):
-        """从当前页面 URL 的 preselect 参数提取变体 tcin"""
+        """Read the active TCIN from Target's routed or preselected URL."""
         try:
-            current_url = page.url
-            match = re.search(r'preselect=(\d+)', current_url)
+            current_url = str(page.url or "")
+            match = re.search(r'[?&]preselect=(\d+)', current_url)
+            if not match:
+                match = re.search(r'/A-(\d+)', current_url)
             if match:
                 return match.group(1)
         except:
             pass
         return None
+
+    def _wait_for_variant_price(self, page, desired_options):
+        """Read immediately, then wait only while a selected variant has no price."""
+        deadline = time.monotonic() + self.variant_wait_seconds
+
+        def normalize(value):
+            return re.sub(r"\s+", "", str(value).strip().lower())
+
+        def is_selected_option(chip, name, value):
+            return (
+                chip.get("selected")
+                and normalize(chip.get("name", "")) == normalize(name)
+                and normalize(chip.get("text", "")) == normalize(value)
+            )
+
+        while time.monotonic() < deadline:
+            chips = self._get_variant_chip_values(page)
+            selected = chips and all(
+                any(is_selected_option(chip, name, value) for chip in chips)
+                for name, value in desired_options
+            )
+            if selected:
+                price = self._extract_price_from_dom(page, retry=1)
+                if price:
+                    return price
+            time.sleep(0.5)
+        return ""
+
+    def _reload_product_page(self, page, url):
+        """Restore the base product page before retrying a variant combination."""
+        page.get(url)
+        self._wait_for_manual_verification(page, url)
+        self._wait_for_price_ready(page)
 
     def _extract_variant_data_from_dom(
         self, page, url, variations_dict, cached_data=None, parent_price=""
@@ -470,6 +572,18 @@ class Get_Product(BaseStep4):
                     return current_chips
             return current_chips
 
+        def follow_chip_href(chip):
+            href = str(chip.get("href") or "").strip()
+            if not href:
+                return False
+            try:
+                page.get(urljoin(str(page.url or url), href))
+                self._wait_for_manual_verification(page, url)
+                self._wait_for_price_ready(page)
+                return True
+            except Exception:
+                return False
+
         def select_variant(props_dict):
             # Color first: Target often enables valid size chips only after its
             # corresponding color swatch has been selected.
@@ -499,15 +613,27 @@ class Get_Product(BaseStep4):
                 clicked = self._click_variant_chip(
                     page, target_chip["text"], target_chip.get("name")
                 )
-                if not clicked:
-                    return False, f"无法点击 {option_name}={option_value}", is_out_of_stock
-                self._wait_for_manual_verification(page, url)
-                current_chips = wait_until_selected(option_name, option_value)
+                if clicked:
+                    self._wait_for_manual_verification(page, url)
+                    current_chips = wait_until_selected(option_name, option_value)
+                else:
+                    current_chips = []
                 if not any(
                     chip["selected"] and is_option(chip, option_name, option_value)
                     for chip in current_chips
                 ):
-                    return False, f"点击后未选中 {option_name}={option_value}", is_out_of_stock
+                    # Target's chips sometimes route to a new page without
+                    # updating the current DOM's selected class. The href is
+                    # the browser-visible equivalent of selecting that chip.
+                    if not follow_chip_href(target_chip):
+                        action = "点击后未选中" if clicked else "无法点击"
+                        return False, f"{action} {option_name}={option_value}", is_out_of_stock
+                    current_chips = wait_until_selected(option_name, option_value)
+                    if not any(
+                        chip["selected"] and is_option(chip, option_name, option_value)
+                        for chip in current_chips
+                    ):
+                        return False, f"跳转后未选中 {option_name}={option_value}", is_out_of_stock
             return True, "", is_out_of_stock
 
         selection_failures = {}
@@ -515,27 +641,46 @@ class Get_Product(BaseStep4):
             v_tcin = str(v_tcin)
             if v_tcin in variant_data:
                 continue
-            selected, reason, is_out_of_stock = select_variant(props_dict)
-            if not selected and not is_out_of_stock:
-                selection_failures[v_tcin] = reason
-                continue
+            desired_options = list(props_dict.items())
+            failure_reasons = []
+            for attempt in range(1, self.variant_attempts + 1):
+                selected, reason, is_out_of_stock = select_variant(props_dict)
+                price = ""
+                if selected:
+                    price = self._wait_for_variant_price(page, desired_options)
+                    if not price:
+                        reason = "目标变体已选中，但页面价格未在等待时间内刷新"
+                elif is_out_of_stock:
+                    # Disabled Target chips cannot reliably acquire the
+                    # selected class. Their visible parent price is retained
+                    # only after the stock state has been confirmed.
+                    price = self._extract_price_from_dom(page, retry=1) or parent_price
 
-            price = self._extract_price_from_dom(page, retry=1)
-            if not price and is_out_of_stock:
-                price = parent_price
-            if not price:
-                selection_failures[v_tcin] = "选中后未提取到价格"
-                continue
-            price = self._format_price(price)
-            variant_data[v_tcin] = {
-                "price": price,
-                **({"stock": 0} if is_out_of_stock else {}),
-            }
-            self._cache_variant_price(
-                url, v_tcin, price, stock=0 if is_out_of_stock else None
-            )
-            status = "[缺货变体]" if is_out_of_stock else "[变体]"
-            print(f"    {status} tcin={v_tcin}, 价格=${price}")
+                if price:
+                    price = self._format_price(price)
+                    variant_data[v_tcin] = {
+                        "price": price,
+                        **({"stock": 0} if is_out_of_stock else {}),
+                    }
+                    self._cache_variant_price(
+                        url, v_tcin, price, stock=0 if is_out_of_stock else None
+                    )
+                    status = "[缺货变体]" if is_out_of_stock else "[变体]"
+                    print(f"    {status} tcin={v_tcin}, 价格=${price}")
+                    break
+
+                failure_reasons.append(reason or "未提取到价格")
+                if attempt < self.variant_attempts:
+                    print(
+                        f"    [重试] tcin={v_tcin} 第 {attempt + 1}/"
+                        f"{self.variant_attempts} 次: {failure_reasons[-1]}"
+                    )
+                    try:
+                        self._reload_product_page(page, url)
+                    except Exception as exc:
+                        failure_reasons.append(f"重载商品页失败: {exc}")
+            else:
+                selection_failures[v_tcin] = "；".join(failure_reasons)
 
         unmatched = all_tcins - set(variant_data)
         if unmatched:
@@ -550,8 +695,7 @@ class Get_Product(BaseStep4):
         missing_tcins = sorted(
             str(tcin)
             for tcin in variations_dict
-            if not self._has_price(variant_data.get(str(tcin), {}).get("price"))
-            and variant_data.get(str(tcin), {}).get("stock") != 0
+            if not self._has_positive_price(variant_data.get(str(tcin), {}).get("price"))
         )
         if missing_tcins:
             raise ValueError(
@@ -659,19 +803,17 @@ class Get_Product(BaseStep4):
             raise ValueError("未找到产品节点")
 
         item_node = product_node.get("item", {})
-        tcin = product_node.get("tcin") or re.search(r'/A-(\d+)', url)
-        if isinstance(tcin, type(re.search(r'', ''))):
-            tcin = tcin.group(1) if tcin else None
+        url_tcin = re.search(r"/A-(\d+)", str(url))
+        tcin = product_node.get("tcin") or (url_tcin.group(1) if url_tcin else None)
 
 
         dom_price = self._extract_price_from_dom(page)
 
         desc_node = item_node.get("product_description", {})
-        product_name = desc_node.get("title") or item_node.get("title") or "Target Product"
+        product_name = desc_node.get("title") or item_node.get("title")
         brand_name = (
             item_node.get("primary_brand", {}).get("name")
             or product_node.get("primary_brand", {}).get("name")
-            or "clorox"
         )
 
         price_value = self._format_price(dom_price) if dom_price else ""
@@ -783,7 +925,7 @@ class Get_Product(BaseStep4):
         html_specs = f"""<div style="padding: 20px 0;"><ul style="list-style: none; padding: 0; margin: 0;">{s_li}</ul><div style="margin-top: 24px;"><p style="font-weight: bold; margin-bottom: 4px; font-size: 14px; color: #333;">Grocery Disclaimer:</p><p style="font-size: 13px; line-height: 1.6; color: #333;">{self._clean(item_node.get("disclaimer", {}).get("description", ""))}</p></div></div>"""
 
         results = []
-        parent_sku = str(tcin) if tcin else url.split('/')[-1]
+        parent_sku = str(tcin).strip()
 
         extract_all_variants = bool(variations_dict) and self.should_extract_all_variants(
             product_node, variations_dict
@@ -830,12 +972,11 @@ class Get_Product(BaseStep4):
                     "Images": self.Tool.config.images_split.join(v_images), "Parent": parent_sku,
                     "brand": brand_name, "Stock": v_info.get("stock", 1000.00), "is_upload": 0
                 }
-                if len(props_items) > 0:
-                    row["Attribute 1 name"] = props_items[0][0]
-                    row["Attribute 1 value(s)"] = props_items[0][1]
-                if len(props_items) > 1:
-                    row["Attribute 2 name"] = props_items[1][0]
-                    row["Attribute 2 value(s)"] = props_items[1][1]
+                for attribute_index, (attribute_name, attribute_value) in enumerate(
+                    props_items, start=1
+                ):
+                    row[f"Attribute {attribute_index} name"] = attribute_name
+                    row[f"Attribute {attribute_index} value(s)"] = attribute_value
                 results.append(row)
 
         return results
@@ -845,6 +986,7 @@ class Get_Product(BaseStep4):
         tab = self.get_tab()
         try:
             ls = self.process_product(tab, url)
+            self._validate_product_rows(ls)
             return ls
         except Exception as e:
             print(f'获取产品失败:{e}')

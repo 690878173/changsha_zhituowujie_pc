@@ -56,10 +56,14 @@ can provide completion for `Tool.xxx`. The supplied external-template
 `Tool.HTML.save(html)` comments out script tags in a debug HTML snapshot. Use `Tool.HTML.save_raw(html)` only when a parser or diagnosis needs the original script contents preserved.
 
 `Tool.HTML.clean_product_desc(tree)` is the rich-text sanitizer for an already
-parsed lxml tree. It keeps only `p`, `br`, lists, and basic emphasis tags;
+parsed lxml tree. It works on a deep copy, leaving the caller's source DOM
+unchanged. It keeps only `p`, `br`, lists, and basic emphasis tags;
 removes link attributes, raw `http(s)` URLs, scripts, forms, iframes, SVG, and
-similar unsafe markup. `clean_product_desc_str(value)` is the matching string
-wrapper. `HTML.is_text_field(name)` detects description-like metafields such
+similar unsafe markup. Non-empty root-level text and inline markup are wrapped
+in `<p>` so both `clean_product_desc()` and `clean_product_desc_str(value)`
+return display-ready HTML strings rather than bare text. Nested text-only
+`div` elements are converted to paragraphs before unsupported containers are
+unwrapped, preserving visible paragraph boundaries. `HTML.is_text_field(name)` detects description-like metafields such
 as `metafield`, `miaoshu`, `detail`, `feature`, `dimension`, `warranty`, and
 `specification`.
 
@@ -294,9 +298,17 @@ def fetch_page(self, page, params):
 
 - Return `list[str]` product URLs and a truthy next-page URL to continue.
 - Set `page.status = 'end'` for a confirmed empty/end/invalid page. It is cached and skipped next time.
-- Set `page.status = 'fail'` for a temporary request failure. It is not cached and will retry next run.
+- Set `page.status = 'fail'` for a temporary request failure. It is not cached. After the first pass finishes every input category, `GetDetail` resumes each failed page once by default; only pages that still fail remain uncached for the next run. Pass `retry_failed_pages=False` to disable this final retry batch.
 - Override `build_params(page)` when request parameters affect a page. The result participates in the cache key.
 - Use `Tool.get` by default; use `self.get_page(...)` only when browser automation is needed.
+- For a Shopify collection URL with a query string, add `/products.json` to the
+  URL path before restoring the original query string. For example,
+  `/collections/bottles?filter=x` becomes `/collections/bottles/products.json?filter=x`;
+  never append `/products.json` after the query string. This preserves the
+  query, but a theme-defined filter is not necessarily supported by Shopify's
+  public `products.json` endpoint. Validate sampled results before caching;
+  when the endpoint returns the unfiltered collection, use the site's actual
+  collection-data endpoint instead.
 
 Input: `{category_name: category_url}` JSON. Output: `{category_name: [detail_url, ...]}` JSON.
 
@@ -318,11 +330,11 @@ For a site-specific manual checkpoint, a subclass may override
 item, queued URLs remain uncached for a later retry, and normal partial CSV
 output is still written. The default returns `False`.
 
-The return may contain dictionaries or objects exposing `to_dic()`. It must normalize to a non-empty list. `None` or an empty list is treated as a failed parse, is not cached, and retries on the next run. Step4 reuses successful product results for the same URL across categories, writes cache data, then exports the test CSV and the final CSV. The `Categories` field is replaced with the task category during final output.
+The return may contain dictionaries or objects exposing `to_dic()`. It must normalize to a non-empty list. Before Step4 writes its index/catch cache, the shared gate applies these Type-specific rules: `simple` (or an omitted Type) requires non-empty `SKU`, `Name`, `Description`, and `Images`, plus positive `Sale price` and `Regular price`; `variable` requires non-empty `SKU`, `Name`, `Description`, and `Images`, but no price; `variation` requires non-empty `SKU`, `Name`, and `Parent`, plus positive `Sale price` and `Regular price`. Integer and decimal prices are accepted. The gate does not validate URL syntax or description provenance. A missing required value or invalid price fails that task and leaves it retryable. Every row that passes is normalized to `Stock=1000`. `None` or an empty list is likewise a failed parse and is not cached. After the first worker pass, Step4 retries that run's failed category tasks once by default; a recovered task is removed from `fail_file`, while a remaining failure retries on the next run. Pass `retry_failed_tasks=False` to disable the final retry batch. Step4 prints first-pass, recovered, and final failure counts before it exports the test CSV and final CSV. The `Categories` field is replaced with the task category during final output.
 
 Use `Tool.Product.Simple(...).to_dic()` or `Tool.Product.Variation(...).to_dic()` when the standard output schema fits. Keep HTTP/browser request and parser code inside `fetch_product`.
 
-`stock=None` uses the standard fallback stock value. Pass `stock=0` for a known out-of-stock SKU; zero is preserved in the exported row.
+`stock=None` uses the standard fallback stock value. Product helpers preserve an explicit `stock=0`, but Step4's shared cache gate normalizes every successful row to `Stock=1000`.
 
 Product helpers normalize relative image links against `base_url` before they
 enter the `Images` field. Keep site-specific image extraction inside
@@ -371,7 +383,9 @@ Quchong(Tool).run()
 ```
 
 Target `Step2` preserves the existing SLP API parameters, new-session
-fingerprint rotation, retries, and backoff. It writes a standard mapping for
+fingerprint rotation, retries, and backoff. After its initial SLP pages finish,
+it runs one additional request batch for only the pages that exhausted their
+per-page retries, then reports initial, recovered, and final page failures. It writes a standard mapping for
 `Step4`; a legacy flat Target URL JSON file is also accepted by Target
 `Step4`. Target detail parsing uses the template's native DrissionPage calls,
 so configure `backend='drissionpage'` before running it:
@@ -387,9 +401,11 @@ Quchong(Tool).run()
 `_ljp.mb.target.Get_Product` treats a Target browser verification page as a
 manual checkpoint. It pauses newly started detail tasks and asks the operator
 to complete the visible browser challenge before pressing Enter; it does not
-cache that incomplete product. For a product with a variation hierarchy, all
-expected TCINs must have a non-empty price before the normal Step4 product
-cache is written. Successful individual variation prices are checkpointed to
+cache that incomplete product. Target additionally requires complete variation
+parent/attribute data. The shared Step4 gate validates common fields and prices
+without requiring URL syntax or source-description provenance. For a product
+with a variation hierarchy, all expected TCINs must additionally have a
+positive price. Successful individual variation prices are checkpointed to
 `variant_cache_path` (or an adjacent `*_variants.json` file by default), so a
 later retry only needs to collect missing variants. This Target-specific cache
 is internal resume state, while the normal Step4 cache remains the only source
@@ -411,7 +427,7 @@ availability can update before the size is evaluated. A temporarily disabled
 chip is still clicked and parsed. Target's `aria-label` values may append
 `- Out of Stock`, and its unavailable CSS class is handled as the same stock
 state after that suffix is removed from the option value. That variation is
-exported with `Stock=0`; its current page price is retained, falling back to
+exported with `Stock=1000`; its current page price is retained, falling back to
 the selected parent price only when no variation price is rendered.
 Missing options and non-disabled click failures remain incomplete variations
 and are not cached. Leave Chromium's native user agent in place so its UA and
@@ -455,6 +471,9 @@ The shared cache models are `Catch` and `Index` in `_ljp/mb/model.py`
   category-task mapping. The writer flushes after `catch_save_num` changes and
   also performs a final flush when the run ends, so a cache-only run may still
   rewrite the JSON files even though no new product was fetched.
+- A Step4 failure is retained in `fail_file` only after its final in-run retry
+  batch also fails. A successful retry writes the normal index/catch entries
+  and removes that category task from the final failure mapping.
 
 Do not add a parallel cache dictionary or raw cache-file format in a site Step. Use the template cache APIs and let `run()` save them.
 
@@ -705,7 +724,7 @@ WooCommerce-style columns below:
 | identity | `Type` (`simple`/`variation`), `SKU`, `Name`, `Parent`, `Categories`, `Tags` |
 | pricing | `Sale price`, `Regular price` (price strings lose `$` and `/ea`) |
 | content | `Description`, `Images` (absolute URLs joined by `config.images_split`) |
-| inventory | `Stock` (defaults to `1000.0`; explicit `0` is preserved), `is_upload` |
+| inventory | `Stock` (defaults to `1000.0`; Step4 normalizes cached rows to `1000`), `is_upload` |
 | source | internal `url` (removed by `json_del_url` before final CSV) |
 | custom | `**exc`, renamed to `name(product.metafields.c_f.name)` and cleaned when the field is text-like |
 
@@ -784,12 +803,12 @@ model also accepts an optional category argument for compatibility). Category
 membership is stored separately in `catch`. Treat task IDs as opaque and use
 `catch`/`index` APIs rather than constructing IDs manually.
 
-Step4 exports rows in the order of the current input mapping: category order,
-then each category's URL-list order. Requests may complete in any order, and
-cache insertion order is deliberately not used for CSV ordering. All rows
-returned for one source URL remain contiguous; this keeps a product's parent
-and variation rows together. Reordering the input file changes the output
-order even when every product result already exists in cache.
+Step4 exports source-URL blocks in current input order. Requests may complete
+in any order, and cache insertion order is deliberately not used for CSV
+ordering. All rows returned for one source URL remain contiguous and keep their
+original order; this keeps a product's parent and variation rows together.
+Reordering the input file changes the output order even when every product
+result already exists in cache.
 
 ## Standard Post-processing Steps
 
@@ -800,12 +819,18 @@ These classes are pure file transforms; they do not issue site requests.
 | `Detail_QuChong` | category mapping -> URL list JSON | global first-seen URL dedupe |
 | `Quchong` | `result.csv` -> `quchong.csv` | group by `SKU`, merge `Categories`, preserve original row order; warns on other field conflicts (blank SKUs form one group) |
 | `Variable` | variation rows -> `variable.csv` | inserts one `variable` parent before each family; parent SKU is child `Parent`; when present, `Categories` participates in grouping; configurable `merge_fields`/`description_fields` |
-| `Replace_imgs` | CSV -> CSV | MD5 URL basename + `.webp`; skips failed URLs and already-converted CDN URLs; removes parent families with no image |
+| `Replace_imgs` | CSV -> CSV | Reverses whole product-family blocks before rewriting URLs, while retaining each `variable` parent and its contiguous `variation` rows in order; then MD5 URL basename + `.webp`, skips failed URLs and already-converted CDN URLs, and removes parent families with no image |
 | `WpToShopify` | WooCommerce CSV -> Shopify CSV | streaming conversion; source families must be ordered `variable` then its `variation` rows |
 | `Shopify_dz` | Shopify CSV -> discount CSV | removes every handle whose compare-at price is numeric zero, then computes `Variant Price = Variant Compare At Price * Tool.zk`, rounded to 2 decimals |
 | `Collection` | discount CSV -> collection CSV(s) | reads `Tags`, case-insensitive dedupe, writes at most 99 smart-collection rows per file |
 | `IMG_download_ljp` | CSV `Images` -> local WebP files | reads `[PATHS]`, `[PROXY]`, `[REQUEST]` from `config.ini`; failed URLs go to `failed_log` |
 
+`Replace_imgs` reverses product-family blocks for every site before it changes
+image URLs. A `variable` row and its immediately following `variation` rows
+remain one block with their internal order unchanged; standalone rows reverse
+as individual blocks. An orphan variation, or one not immediately following
+its parent, raises `ValueError` rather than silently breaking a family. Inputs
+without all of `Type`, `SKU`, and `Parent` retain their existing order.
 `Replace_imgs` hashes the complete original URL, so query-string changes create
 different filenames. Override only `build_new_url_base()` or
 `load_failed_images()` for site policy. `WpToShopify` keeps the final variable

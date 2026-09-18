@@ -7,7 +7,7 @@ EXTRA_META_COLUMNS = [
 ]
 
 input_csv = Tool.File.path_add_site(r"res/picture.csv")
-output_csv = Tool.File.path_add_site(r"data/wp_to_shopify.csv")
+output_csv = Tool.File.path_add_site(r"res/wp_to_shopify.csv")
 
 # =============================================================
 

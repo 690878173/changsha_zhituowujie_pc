@@ -1,8 +1,12 @@
+import copy
+
 from _ljp.mb.model import Base, PageModel
 
 
 class GetDetail(Base):
     """分类详情 URL 分页抓取基类"""
+
+    skip_in_url_ls = ['gift-card','giftcard','gift_card']
 
     def __init__(self, tool,
                  input_path,
@@ -13,7 +17,8 @@ class GetDetail(Base):
                  skip_output_url_ls=None,
                  ts_num=None,
                  flush=False,
-                 catch_save_num = None
+                 catch_save_num = None,
+                 retry_failed_pages=True,
                  ):
         self.tool = tool
         self.Tool = tool
@@ -26,6 +31,13 @@ class GetDetail(Base):
         self.ts_num = ts_num
         self.flush = flush
         self.catch_save_num = catch_save_num or 10
+        self.retry_failed_pages = bool(retry_failed_pages)
+        # A failed page is deliberately absent from the normal cache. Keep its
+        # live pagination state here so it can be resumed once after the first
+        # pass without restarting successfully cached pages.
+        self.failed_pages = {}
+        self._initial_failed_page_keys = set()
+        self._recovered_failed_page_keys = set()
         self._init()
 
     # ================= 缓存管理（基于 BaseCatch 模型） =================
@@ -60,6 +72,38 @@ class GetDetail(Base):
 
     def after_one_request(self, p:PageModel):
         pass
+
+    @staticmethod
+    def _failed_page_key(name, pagemodel):
+        return name, pagemodel.url
+
+    @staticmethod
+    def _clone_pagemodel(pagemodel):
+        return PageModel(
+            url=pagemodel.url,
+            next_url=pagemodel.next_url,
+            page=pagemodel.page,
+            is_next=pagemodel.is_next,
+            extra=copy.deepcopy(pagemodel.extra),
+            status=pagemodel.status,
+        )
+
+    def _record_failed_page(self, name, category_idx, pagemodel, retry):
+        key = self._failed_page_key(name, pagemodel)
+        self.failed_pages[key] = {
+            'name': name,
+            'category_idx': category_idx,
+            'pagemodel': self._clone_pagemodel(pagemodel),
+        }
+        if not retry:
+            self._initial_failed_page_keys.add(key)
+
+    def _clear_failed_page(self, name, pagemodel):
+        key = self._failed_page_key(name, pagemodel)
+        if key in self.failed_pages:
+            self.failed_pages.pop(key, None)
+            if key in self._initial_failed_page_keys:
+                self._recovered_failed_page_keys.add(key)
 
     # ================= 通用流程（无需修改） =================
 
@@ -101,6 +145,15 @@ class GetDetail(Base):
             return index_id, False, False, 0
         # Keep the source page order while removing duplicate detail URLs.
         product_urls = list(dict.fromkeys(product_urls or []))
+        ls = []
+        for i in product_urls:
+            for j in self.skip_in_url_ls:
+                if j in i:
+                    break
+            else:
+                continue
+
+            ls.append(i)
 
         if len(product_urls) == 0:
             self.Tool.print(f'url数量为0,{pagemodel.url}', color='yellow')
@@ -111,12 +164,17 @@ class GetDetail(Base):
         })
         return index_id, pagemodel.is_next, False, len(product_urls or [])
 
-    def get_all_detail_url(self, url, name, category_idx):
+    def get_all_detail_url(self, url, name, category_idx, pagemodel=None, retry=False):
         _num = 0
-        pagemodel = PageModel(url=url, next_url=url, page=_num + 1)
-        self.before_request(pagemodel)
-        self.Tool.print(f'[分类] 正在请求:  {name} ',color='cyan')
+        if pagemodel is None:
+            pagemodel = PageModel(url=url, next_url=url, page=_num + 1)
+            self.before_request(pagemodel)
+        phase = '补抓' if retry else '首轮'
+        self.Tool.print(f'[{phase}分类] 正在请求:  {name} ',color='cyan')
         while True:
+            # A retry resumes a PageModel that was previously marked failed.
+            # Clear that marker before a potential cache hit or fresh request.
+            pagemodel.status = None
             index_id, is_next, from_cache, count = self.get_detail_url(pagemodel)
 
 
@@ -127,12 +185,16 @@ class GetDetail(Base):
                     color='green',
                 )
             elif pagemodel.is_fail():
+                self._record_failed_page(name, category_idx, pagemodel, retry)
                 self.Tool.print(
                     f"【分类 {category_idx}/{self.total_category} | {name}】"
-                    f"第 {pagemodel.page} 页抓取失败,等待下次运行重试",
+                    f"第 {pagemodel.page} 页抓取失败，"
+                    f"{'本轮补抓后仍失败' if retry else '将在首轮结束后补抓一次'}",
+                    color='yellow',
                 )
                 break
             else:
+                self._clear_failed_page(name, pagemodel)
                 self.Tool.print(
                     f"【分类 {category_idx}/{self.total_category} | {name}】"
                     f"第 {pagemodel.page} 页抓取成功，商品 {count} 条：{pagemodel.url}",
@@ -220,6 +282,37 @@ class GetDetail(Base):
                     break
                 url,name,category_idx = self._before_get_all_detail_url(url, name, category_idx)
                 self.get_all_detail_url(url, name, category_idx)
+
+        if self.failed_pages and self.retry_failed_pages:
+            retry_pages = list(self.failed_pages.values())
+            self.Tool.print(
+                f"首轮分类页失败 {len(retry_pages)} 页，开始集中补抓一次。",
+                color='yellow',
+            )
+            for item in retry_pages:
+                page = self._clone_pagemodel(item['pagemodel'])
+                self.get_all_detail_url(
+                    page.url,
+                    item['name'],
+                    item['category_idx'],
+                    pagemodel=page,
+                    retry=True,
+                )
+
+        self.Tool.print(
+            "分类页失败统计："
+            f"首轮失败 {len(self._initial_failed_page_keys)} 页，"
+            f"补抓恢复 {len(self._recovered_failed_page_keys)} 页，"
+            f"最终失败 {len(self.failed_pages)} 页。",
+            color='yellow' if self.failed_pages else 'green',
+        )
+        if self.failed_pages:
+            for item in self.failed_pages.values():
+                page = item['pagemodel']
+                self.Tool.print(
+                    f"  最终失败：分类「{item['name']}」第 {page.page} 页 {page.url}",
+                    color='yellow',
+                )
 
         self.Tool.print("所有分类抓取完成，开始汇总输出最终详情链接……", color='green')
 

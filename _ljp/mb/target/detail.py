@@ -20,12 +20,18 @@ headers = {
 
 
 def get_target_detail_urls(keyword="doritos", max_pages=9):
+    """Collect Target SLP pages, then retry only pages that exhausted retries."""
     all_buy_urls = []
     api_url = 'https://cdui-orchestrations.target.com/cdui_orchestrations/v1/pages/slp'
+    fingerprints = ["chrome120", "chrome124", "chrome131", "chrome136", "chrome142", "chrome145"]
+    max_retries = 8
 
-    for page_idx in range(max_pages):
+    def collect_page(page_idx, phase):
         offset = page_idx * 24
-        print(f"🔄 正在抓取第 {page_idx + 1} 页，关键词: {keyword}, Offset: {offset}...")
+        print(
+            f"[{phase}] 正在抓取第 {page_idx + 1} 页，"
+            f"关键词: {keyword}, Offset: {offset}..."
+        )
 
         params = {
             'key': '9f36aeafbe60771e321a7cc95a78140772ab3e96',
@@ -57,11 +63,6 @@ def get_target_detail_urls(keyword="doritos", max_pages=9):
             'timezone': 'Asia/Shanghai',
         }
 
-        # 浏览器指纹池：轮换使用以应对 Target 的指纹/连接检测
-        fingerprints = ["chrome120", "chrome124", "chrome131", "chrome136", "chrome142", "chrome145"]
-
-        # 失败自动重试：轮换指纹 + 退避递增，尽量不丢页
-        max_retries = 8
         success = False
         res_json = None
         for attempt in range(max_retries):
@@ -77,7 +78,7 @@ def get_target_detail_urls(keyword="doritos", max_pages=9):
                     )
 
                 if resp.status_code != 200:
-                    print(f"❌ 请求失败，状态码: {resp.status_code}.")
+                    print(f"请求失败，状态码: {resp.status_code}.")
                     print(f"响应内容: {resp.text[:200]}")
                     # 403/429 多半是临时限流，当作网络错误继续重试换指纹
                     if resp.status_code in (403, 429):
@@ -91,7 +92,7 @@ def get_target_detail_urls(keyword="doritos", max_pages=9):
 
             except RequestsError as e:
                 # 涵盖 TLS connect error / 连接被重置 / 超时 / 限流等
-                print(f"  ⚠️ 第 {attempt + 1}/{max_retries} 次请求失败(指纹 {fp}): {e}")
+                print(f"  第 {attempt + 1}/{max_retries} 次请求失败(指纹 {fp}): {e}")
                 if attempt < max_retries - 1:
                     # 退避时间指数递增：10→20→40→80→90→90→90 + 随机抖动，上限 90 秒
                     backoff = min(10 * (2 ** attempt), 90) + random.uniform(0, 5)
@@ -103,16 +104,17 @@ def get_target_detail_urls(keyword="doritos", max_pages=9):
                 else:
                     print("     重试耗尽。")
             except Exception as e:
-                print(f"💥 发生错误: {e}")
+                print(f"发生错误: {e}")
                 break
 
-        # 该页重试耗尽，跳过这一页继续下一页（并记录 offset 便于手动补抓）
+        # Keep this page for one final batch retry after all other SLP pages.
         if not success or res_json is None:
-            print(f"⚠️ 第 {page_idx + 1} 页重试 {max_retries} 次仍失败，跳过。可手动补抓 offset={offset}")
-            time.sleep(random.uniform(30, 50))
-            continue
+            print(
+                f"[{phase}] 第 {page_idx + 1} 页重试 {max_retries} 次仍失败，"
+                f"offset={offset}"
+            )
+            return None
 
-        # 解析逻辑
         products = []
         modules = res_json.get('data_source_modules', [])
         for module in modules:
@@ -122,10 +124,10 @@ def get_target_detail_urls(keyword="doritos", max_pages=9):
                 break
 
         if not products:
-            print("⚠️ 这一页没有找到产品数据，可能到底了。")
-            break
+            print("这一页没有找到产品数据，可能到底了。")
+            return []
 
-        page_count = 0
+        page_urls = []
         for p in products:
             buy_url = p.get('enrichment', {}).get('buy_url') or \
                       p.get('item', {}).get('enrichment', {}).get('buy_url')
@@ -135,11 +137,26 @@ def get_target_detail_urls(keyword="doritos", max_pages=9):
 
             if buy_url:
                 full_url = f"https://www.target.com{buy_url}" if not buy_url.startswith('http') else buy_url
-                if full_url not in all_buy_urls:
-                    all_buy_urls.append(full_url)
-                    page_count += 1
+                page_urls.append(full_url)
 
-        print(f"✅ 第 {page_idx + 1} 页抓取成功，新增 {page_count} 个链接")
+        return list(dict.fromkeys(page_urls))
+
+    failed_page_indices = []
+    for page_idx in range(max_pages):
+        page_urls = collect_page(page_idx, "首轮")
+        if page_urls is None:
+            failed_page_indices.append(page_idx)
+            time.sleep(random.uniform(30, 50))
+            continue
+        if not page_urls:
+            break
+
+        page_count = 0
+        for full_url in page_urls:
+            if full_url not in all_buy_urls:
+                all_buy_urls.append(full_url)
+                page_count += 1
+        print(f"第 {page_idx + 1} 页抓取成功，新增 {page_count} 个链接")
 
         if page_count == 0:
             break
@@ -147,6 +164,30 @@ def get_target_detail_urls(keyword="doritos", max_pages=9):
         # 间隔调大，降低被 Target 主动断连的概率
         time.sleep(random.uniform(8, 14))
 
+    final_failed_page_indices = []
+    if failed_page_indices:
+        print(f"首轮失败 {len(failed_page_indices)} 页，开始集中补抓一次。")
+        for page_idx in failed_page_indices:
+            page_urls = collect_page(page_idx, "补抓")
+            if page_urls is None:
+                final_failed_page_indices.append(page_idx)
+                continue
+            for full_url in page_urls:
+                if full_url not in all_buy_urls:
+                    all_buy_urls.append(full_url)
+
+    recovered_count = len(failed_page_indices) - len(final_failed_page_indices)
+    print(
+        "Target 分类页失败统计："
+        f"首轮失败 {len(failed_page_indices)} 页，"
+        f"补抓恢复 {recovered_count} 页，"
+        f"最终失败 {len(final_failed_page_indices)} 页。"
+    )
+    if final_failed_page_indices:
+        print(
+            "最终失败 offset："
+            + ", ".join(str(page_idx * 24) for page_idx in final_failed_page_indices)
+        )
     return all_buy_urls
 
 class GetDetail:
@@ -167,7 +208,7 @@ class GetDetail:
         }
         self.Tool.File.save_json(res_dic, self.output_path)
 
-        print(f"\n🎉 任务完成！共计 {len(final_results)} 个链接已保存至: {self.output_path}")
+        print(f"\n任务完成！共计 {len(final_results)} 个链接已保存至: {self.output_path}")
 
 
 
@@ -184,6 +225,4 @@ if __name__ == "__main__":
     with open(file_name, "w", encoding="utf-8") as f:
         json.dump(final_results, f, ensure_ascii=False, indent=4)
 
-    print(f"\n🎉 任务完成！共计 {len(final_results)} 个链接已保存至: {file_name}")
-
-
+    print(f"\n任务完成！共计 {len(final_results)} 个链接已保存至: {file_name}")

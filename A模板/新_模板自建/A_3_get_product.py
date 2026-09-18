@@ -4,12 +4,12 @@ from config import Tool
 # 文件路径配置
 input_file = Tool.File.path_add_site('data/detail_url.json')
 output_file = Tool.File.path_add_site("res/result.csv")
-fail_file = Tool.File.path_add_site('data/fail.json')
+fail_file = Tool.File.path_add_site('fail/3/fail.json')
 
 catch_path = Tool.File.path_add_site('hc/3/data.json')
 index_path = Tool.File.path_add_site('hc/3/index.json')
 # 携带原始url输出文件
-output_ts_file = Tool.File.path_add_site('hc/3/result.csv')
+output_ts_file = Tool.File.path_add_site('hc/3/ts_url.csv')
 
 # 测试数据条数 (None = 全部抓取)
 ts_num = None
