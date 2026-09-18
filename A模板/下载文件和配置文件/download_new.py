@@ -334,7 +334,7 @@ class IMG_download_ljp:
                         except Exception:
                             pass
                     session = requests.Session(
-                        timeout=self.request_timeout, impersonate=imp,
+                        timeout=self.request_timeout, impersonate=imp
                     )
 
                 self.random_request_delay()
@@ -355,7 +355,7 @@ class IMG_download_ljp:
 
                 response = session.get(
                     url, proxies=proxy, headers=headers,
-                    impersonate=imp, timeout=self.request_timeout,
+                    impersonate=imp, timeout=self.request_timeout,allow_redirects=True,max_redirects=20
                 )
 
                 if response.status_code == 403:

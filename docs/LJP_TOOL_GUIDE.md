@@ -401,11 +401,12 @@ Quchong(Tool).run()
 `_ljp.mb.target.Get_Product` treats a Target browser verification page as a
 manual checkpoint. It pauses newly started detail tasks and asks the operator
 to complete the visible browser challenge before pressing Enter; it does not
-cache that incomplete product. Target additionally requires complete variation
-parent/attribute data. The shared Step4 gate validates common fields and prices
-without requiring URL syntax or source-description provenance. For a product
-with a variation hierarchy, all expected TCINs must additionally have a
-positive price. Successful individual variation prices are checkpointed to
+cache that incomplete product. Target overrides the shared Step4 cache gate and
+calls it first, then additionally requires complete variation parent/attribute
+data. The shared gate validates common fields and prices without requiring URL
+syntax or source-description provenance. For a product with a variation
+hierarchy, all expected TCINs must additionally have a positive price.
+Successful individual variation prices are checkpointed to
 `variant_cache_path` (or an adjacent `*_variants.json` file by default), so a
 later retry only needs to collect missing variants. This Target-specific cache
 is internal resume state, while the normal Step4 cache remains the only source
@@ -666,6 +667,11 @@ facades are thread-local; each Step4 worker creates/uses its own resources.
 | `read_csv(data=..., path=...)` | Exactly one of in-memory `data` or site-prefixed `path`; returns a DataFrame. |
 | `json_ls_del(rows, target='url')` | Deep-copies row dictionaries and removes the internal field (normally `url`). |
 | `dz_path()` / `fl_path()` | `res/<site_type>_<N>%off_ljp.csv` and `res/<site_type>_col_ljp.csv`, where `N=(1-zk)*100`. |
+
+`Tool.File.Web` is the WebP URL validator. It checks only the first 64 bytes
+of each unique image URL and retries a timed-out check once by default; pass
+`timeout_retries=0` to report the first timeout immediately. HTTP, content,
+and other client errors are not retried by this validator.
 
 Do not mix raw paths and already-prefixed paths casually. The helpers are
 designed to be called with logical paths such as `data/detail_url.json`.

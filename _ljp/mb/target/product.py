@@ -73,8 +73,13 @@ class Get_Product(BaseStep4):
             "target product",
         }
 
-    def _validate_product_rows(self, rows):
-        """Apply Target-specific price and variation checks before Step4's cache gate."""
+    def _validate_rows_before_cache(self, rows):
+        """Run the shared gate, then validate Target-only variation fields."""
+        super()._validate_rows_before_cache(rows)
+        self._validate_target_variation_rows(rows)
+
+    def _validate_target_variation_rows(self, rows):
+        """Validate attributes required by Target's purchasable variations."""
         if not isinstance(rows, list) or not rows:
             raise ValueError("商品没有可写入缓存的数据行")
 
@@ -83,23 +88,7 @@ class Get_Product(BaseStep4):
                 raise ValueError(f"商品第 {position} 行不是字典")
 
             product_type = str(row.get("Type") or "simple").strip().casefold()
-            if product_type not in {"simple", "variable", "variation"}:
-                raise ValueError(f"商品第 {position} 行 Type 无效: {row.get('Type')!r}")
-
-            if product_type != "variable":
-                invalid_prices = [
-                    label
-                    for label in ("Sale price", "Regular price")
-                    if not self._has_positive_price(row.get(label))
-                ]
-                if invalid_prices:
-                    raise ValueError(
-                        f"商品第 {position} 行价格无效，未写入商品缓存；缺少或非正数: "
-                        + ", ".join(invalid_prices)
-                    )
             if product_type == "variation":
-                if not self._has_text(row.get("Parent")):
-                    raise ValueError(f"变体第 {position} 行缺少 Parent，未写入商品缓存")
                 attribute_names = [
                     key for key in row if re.fullmatch(r"Attribute \d+ name", key)
                 ]
@@ -562,7 +551,7 @@ class Get_Product(BaseStep4):
 
         def wait_until_selected(name, value):
             current_chips = []
-            for _ in range(10):
+            for _ in range(5):
                 time.sleep(0.5)
                 current_chips = self._get_variant_chip_values(page)
                 if any(
@@ -982,12 +971,10 @@ class Get_Product(BaseStep4):
         return results
 
     def fetch_product(self, url, category):
-        """Navigate with the configured DrissionPage backend, then parse unchanged template logic."""
+        """Navigate with DrissionPage; BaseStep4 validates before caching."""
         tab = self.get_tab()
         try:
-            ls = self.process_product(tab, url)
-            self._validate_product_rows(ls)
-            return ls
+            return self.process_product(tab, url)
         except Exception as e:
             print(f'获取产品失败:{e}')
             return []

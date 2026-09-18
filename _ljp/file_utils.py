@@ -23,6 +23,7 @@ class WebPValidator:
             separator: str = ",",
             max_workers: int = 150,
             timeout: int = 20,
+            timeout_retries: int = 1,
     ):
 
         if file_path is None and df is None:
@@ -34,6 +35,9 @@ class WebPValidator:
         self.separator = separator
         self.max_workers = max_workers
         self.timeout = timeout
+        if isinstance(timeout_retries, bool) or not isinstance(timeout_retries, int) or timeout_retries < 0:
+            raise ValueError("timeout_retries must be a non-negative integer")
+        self.timeout_retries = timeout_retries
 
         if file_path:
             self._load_file(file_path)
@@ -47,29 +51,31 @@ class WebPValidator:
         self.df = pd.read_csv(file_path)
 
     @staticmethod
-    async def _verify_single_url(session, url: str, timeout: int) -> Tuple[bool, str]:
+    async def _verify_single_url(
+            session, url: str, timeout: int, timeout_retries: int = 1,
+    ) -> Tuple[bool, str]:
         """验证单个 URL 是否为有效的 WebP（仅读文件头）"""
-        try:
-            headers = {"Range": "bytes=0-64"}
-            async with session.get(url, timeout=timeout, headers=headers) as resp:
-                if resp.status not in (200, 206):
-                    return False, f"HTTP {resp.status}"
+        headers = {"Range": "bytes=0-64"}
+        for attempt in range(timeout_retries + 1):
+            try:
+                async with session.get(url, timeout=timeout, headers=headers) as resp:
+                    if resp.status not in (200, 206):
+                        return False, f"HTTP {resp.status}"
 
-                chunk = await resp.content.read(64)
-                if len(chunk) < 12:
-                    return False, "文件过小/头部缺失"
+                    chunk = await resp.content.read(64)
+                    if len(chunk) < 12:
+                        return False, "文件过小/头部缺失"
 
-                if chunk[0:4] == b'RIFF' and chunk[8:12] == b'WEBP':
-                    return True, "OK"
-                else:
+                    if chunk[0:4] == b'RIFF' and chunk[8:12] == b'WEBP':
+                        return True, "OK"
                     return False, f"非 WebP (头: {chunk[:12]})"
-
-        except asyncio.TimeoutError:
-            return False, "超时"
-        except aiohttp.ClientError as e:
-            return False, f"请求错误: {str(e)[:30]}"
-        except Exception as e:
-            return False, f"异常: {str(e)[:30]}"
+            except asyncio.TimeoutError:
+                if attempt == timeout_retries:
+                    return False, "超时"
+            except aiohttp.ClientError as e:
+                return False, f"请求错误: {str(e)[:30]}"
+            except Exception as e:
+                return False, f"异常: {str(e)[:30]}"
 
     async def _run_async_verify(self, tasks: List[Tuple[int, str]]) -> List[Tuple[int, str, bool, str]]:
         """异步并发执行验证"""
@@ -79,7 +85,9 @@ class WebPValidator:
 
             async def bounded_verify(row_idx, url):
                 async with semaphore:
-                    valid, msg = await self._verify_single_url(session, url, self.timeout)
+                    valid, msg = await self._verify_single_url(
+                        session, url, self.timeout, self.timeout_retries,
+                    )
                     return row_idx, url, valid, msg
 
             coros = [bounded_verify(idx, url) for idx, url in tasks]
