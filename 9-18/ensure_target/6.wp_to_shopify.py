@@ -2,13 +2,16 @@ from config import Tool
 from _ljp.mb.base import WpToShopify
 
 # Add any site-specific Shopify metafield column names here.
-extra_meta_columns = []
+extra_meta_columns = [
+    'Label info (product.metafields.c_f.label_info)',
+    'Specifications (product.metafields.c_f.specifications)',
+]
 
 
 input_csv = Tool.File.path_add_site(r"res/picture.csv")
 output_csv = Tool.File.path_add_site(r"res/wp_to_shopify.csv")
 
 if __name__ == "__main__":
-    step = WpToShopify(Tool)
+    step = WpToShopify(Tool,input_file=input_csv,output_file=output_csv)
     step.EXTRA_META_COLUMNS = list(extra_meta_columns)
     step.run()

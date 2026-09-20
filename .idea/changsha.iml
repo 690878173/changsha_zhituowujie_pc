@@ -34,6 +34,7 @@
       <excludeFolder url="file://$MODULE_DIR$/9-16" />
       <excludeFolder url="file://$MODULE_DIR$/9-17/clorox_target/html" />
       <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-7到9-12" />
+      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集" />
     </content>
     <content url="file://$MODULE_DIR$/8-10到8-15/hoka_自建/hc/3" />
     <content url="file://$MODULE_DIR$/9-16/chubbiesshorts_魔改shopify" />
@@ -54,7 +55,7 @@
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/vanicream_target" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-3到8-8/lumedeodorant" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-7到9-12/summerfridays_shopify" />
-    <orderEntry type="jdk" jdkName="uv (changsha)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="uv (changsha_zhituowujie_pc)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>
