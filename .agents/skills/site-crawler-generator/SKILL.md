@@ -13,7 +13,7 @@ metadata:
 
 | 阶段 | Reference | 何时阅读 |
 | --- | --- | --- |
-| 1. 获取目录 | [01-catalog.md](references/catalog.md) | 需要站点导航或分类目录时 |
+| 1. 获取目录 | [01-catalog.md](references/01-catalog.md) | 需要站点导航或分类目录时 |
 | 2. 获取详细链接 | [02-detail-links.md](references/02-detail-links.md) | 从目录、搜索或平台任务生成产品详情任务时 |
 | 3. 获取产品数据 | [03-product-data.md](references/03-product-data.md) | 实现或验证产品、变体和自定义字段解析时 |
 | 4. 去重 | [04-deduplication.md](references/04-deduplication.md) | 合并重复 SKU 和分类时 |
