@@ -68,21 +68,23 @@ class Pc(Get_Product):
 
     def zdy_zd(self, url):
         '''返回字典格式'''
-        # res = Tool.get(url)
-        # html = etree.HTML(res.text)
-        #
-        # Tool.HTML.save(res.text)
-        # dic = {}
-        # for node in html.xpath('//div[@class="product-block product-block__collapsible_tab"]/details'):
-        #     name = node.xpath('./summary/span/text()')[0]
-        #
-        #     for i in ['Specs and Materials', 'Features']:
-        #         if i in name:
-        #             value = node.xpath('./div')[0]
-        #             dic[i] = Tool.HTML.clean_product_desc(value)
-        #             break
-        #
-        # return dic
+        res = Tool.get(url)
+        html = etree.HTML(res.text)
+
+        Tool.HTML.save(res.text)
+        dic = {}
+        name_ls = html.xpath('//nav[@class="product-tabs__nav"]/ul/li')
+        value_ls = html.xpath('//div[@class="product-tabs__body"]/div')
+        for node in html.xpath('//div[@class="product-tabs__body"]/div'):
+            name = node.xpath('./button/text()')[0]
+
+            for i in ['Details','Materials & Care', 'Features']:
+                if i in name:
+                    value = node.xpath('./div')[0]
+                    dic[i] = Tool.HTML.clean_product_desc(value)
+                    break
+
+        return dic
 
     def fetch_product(self, url, category) -> list:
         Tool = self.tool

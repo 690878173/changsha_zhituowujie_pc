@@ -1,4 +1,3 @@
-import json
 import time
 
 from lxml import etree
@@ -9,12 +8,10 @@ input_file = Tool.File.path_add_site('data/detail_url.json')
 output_file = Tool.File.path_add_site('res/result.csv')
 output_ts_file = Tool.File.path_add_site('res/ts_res.csv')
 
-fail_file = Tool.File.path_add_site('fail/4_linked_variants_v2.json')
-# v2 records each target-link's resolved option combination.  Older entries
-# only store the source page's selected values and cannot safely fill options
-# hidden on a linked product page.
-index_path = Tool.File.path_add_site('hc/4_linked_variants_v2/index.json')
-catch_path = Tool.File.path_add_site('hc/4_linked_variants_v2/catch.json')
+fail_file = Tool.File.path_add_site('fail/4.json')
+# NOTE 缓存策略
+index_path = Tool.File.path_add_site('hc/4/index.json')
+catch_path = Tool.File.path_add_site('hc/4/catch.json')
 catch_save_num = None
 
 skip_input_url_ls = []
@@ -69,110 +66,23 @@ from _ljp.mb.shopify import Get_Product
 
 class Pc(Get_Product):
 
-    @staticmethod
-    def _text(values):
-        return ' '.join(' '.join(values).split())
-
-    def linked_variant_data(self, html_text):
-        """Read linked PDP swatches and resolve the option values of each target."""
-        html = etree.HTML(html_text)
-        handles = []
-        selected_options = {}
-        wrapper_data = []
-        swatch_wrappers = html.xpath(
-            '//*[contains(concat(" ", normalize-space(@class), " "), " swatch_wrapper ")]'
-        )
-
-        for wrapper in swatch_wrappers:
-            title = self._text(wrapper.xpath(
-                './preceding-sibling::div['
-                'contains(concat(" ", normalize-space(@class), " "), " swatch-title-box ")'
-                '][1]//h3/text()'
-            )).rstrip(':')
-            swatches = wrapper.xpath(
-                './/*[contains(concat(" ", normalize-space(@class), " "), " swatch_item ")][@data-product]'
-            )
-            if not title or not swatches:
-                continue
-
-            active_value = ''
-            choices = []
-            for swatch in swatches:
-                handle = (swatch.get('data-product') or '').strip()
-                if handle and handle not in handles:
-                    handles.append(handle)
-                option_value = self._text(swatch.xpath('.//text()'))
-                if handle and option_value:
-                    choices.append((handle, option_value))
-                classes = f" {(swatch.get('class') or '').strip()} "
-                if ' active ' in classes:
-                    active_value = option_value
-
-            if not active_value:
-                active_value = self._text(wrapper.xpath(
-                    './preceding-sibling::div['
-                    'contains(concat(" ", normalize-space(@class), " "), " swatch-title-box ")'
-                    '][1]//span/text()'
-                ))
-            if active_value:
-                selected_options[title] = active_value
-            wrapper_data.append((title, active_value, choices))
-
-        target_candidates = {}
-        current_values = {
-            title: value
-            for title, value, _ in wrapper_data
-            if value
-        }
-        for title, _, choices in wrapper_data:
-            for handle, option_value in choices:
-                values = dict(current_values)
-                values[title] = option_value
-                target_candidates.setdefault(handle, []).append(values)
-
-        # A target can occur in more than one swatch wrapper.  Retain only
-        # values every observation agrees on; disagreement means the page
-        # does not expose enough information to infer that target option.
-        target_options = {}
-        for handle, candidates in target_candidates.items():
-            option_names = {
-                name
-                for candidate in candidates
-                for name, value in candidate.items()
-                if value
-            }
-            values = {}
-            for name in option_names:
-                observed = {
-                    candidate[name]
-                    for candidate in candidates
-                    if candidate.get(name)
-                }
-                if len(observed) == 1:
-                    values[name] = observed.pop()
-            if values:
-                target_options[handle] = values
-
-        return handles, selected_options, target_options
-
     def zdy_zd(self, url):
-        '''Return parent custom fields plus the site's linked-product swatches.'''
-        res = Tool.get(url)
-        html = etree.HTML(res.text)
-
-        Tool.HTML.save(res.text)
-        dic = {}
-        for node in html.xpath('//accordion-custom/details'):
-            name = node.xpath('./summary/strong/text()')[0]
-
-            for i in ['Benefits', 'How To Take','Important Disclaimer']:
-                if i in name:
-                    value = node.xpath('./div')[0]
-                    dic[i] = Tool.HTML.clean_product_desc(value)
-                    break
-
-        linked_handles, linked_options, linked_target_options = self.linked_variant_data(res.text)
-        return dic, linked_handles, linked_options, linked_target_options
+        '''返回字典格式'''
+        # res = Tool.get(url)
+        # html = etree.HTML(res.text)
+        #
+        # Tool.HTML.save(res.text)
+        # dic = {}
+        # for node in html.xpath('//div[@class="product-block product-block__collapsible_tab"]/details'):
+        #     name = node.xpath('./summary/span/text()')[0]
+        #
+        #     for i in ['Specs and Materials', 'Features']:
+        #         if i in name:
+        #             value = node.xpath('./div')[0]
+        #             dic[i] = Tool.HTML.clean_product_desc(value)
+        #             break
+        #
+        # return dic
 
     def fetch_product(self, url, category) -> list:
         Tool = self.tool
@@ -190,7 +100,7 @@ class Pc(Get_Product):
             #TODO 使用原url还是   p_url.replace('.json', '')
 
             try:
-                zdy_data, linked_handles, linked_options, linked_target_options = self.zdy_zd(url)
+                zdy_data = self.zdy_zd(url)
             except Exception as e:
                 raise ValueError(f'自定义字段获取失败:{e}')
 
@@ -209,13 +119,6 @@ class Pc(Get_Product):
             shopify_product,
             brand=Tool.site,
             custom_categories=category
-        )
-        # These columns are consumed and removed by A_3_5 before downstream export.
-        woo_product['__linked_handles'] = json.dumps(linked_handles, ensure_ascii=False)
-        woo_product['__linked_options'] = json.dumps(linked_options, ensure_ascii=False)
-        woo_product['__linked_target_options'] = json.dumps(
-            linked_target_options,
-            ensure_ascii=False,
         )
         _products = [woo_product]
         variations = self.create_variation_products(shopify_product, woo_product)

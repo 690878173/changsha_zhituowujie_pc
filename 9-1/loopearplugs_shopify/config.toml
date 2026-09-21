@@ -1,6 +1,6 @@
 [site]
-base_url = "https://ruffwear.com"
-site = "ruffwear.com"
+base_url = "https://loopearplugs.com"
+site = "loopearplugs"
 site_type = "shopify"
 zk = 0.3
 
@@ -13,5 +13,5 @@ images_split = ""
 custom_key = ""
 
 [request.browser]
-enabled = false
+enabled = true
 

@@ -1,68 +1,89 @@
-from config import base_url,Tool
+from pathlib import Path
+from urllib.parse import urlsplit
 
-save_path = Tool.File.path_add_site('data/ml.json')
-from _ljp.mb.base.get_ml import BaseCatalogParser,CatCol
+from lxml import html as lxml_html
 
-class Paraer(BaseCatalogParser):
+from config import Tool, base_url
+from _ljp.mb.base.get_ml import CatalogParser
+from _ljp.mb.shopify import CatCol as ShopifyCatCol
 
-    # f1 返回 {title:{url:str,child:{title:{title:str,child:{}}}}}
-    def f1(self, html, dic):
-        ml1 = html.xpath('//nav[@class="header__inline-menu"]/ul/li/header-menu/details')
-        for node in ml1:
 
-            _name = node.xpath('./summary/span/text()')[0]
-            _url = ''
+class RuffwearMenuParser(CatalogParser):
+    """Parse Ruffwear's desktop Shop mega menu and collection cards."""
 
-            child_dic = self.collector.add_node(dic, _name, _url)
-            print(child_dic)
-            if isinstance(child_dic, dict):
-                child = node.xpath('./div/ul/li')
+    def matches(self, html):
+        return 'data-drawer="drawer-megamenu-1"' in html and 'class="subnav__links"' in html
 
-                self.f2(child_dic, child)
+    @staticmethod
+    def text(node):
+        return ' '.join(' '.join(node.xpath('.//text()[not(ancestor::svg)]')).split())
 
-    def f2(self, dic: dict, child_ls: list):
-        for node in child_ls:
+    @staticmethod
+    def is_collection(url):
+        path = urlsplit(url or '').path.lower().rstrip('/')
+        return path.startswith('/collections/') and '/products/' not in path
 
-            _name = node.xpath('./span/text()')[0]
-            _url = ''
-            # if 'collections' not in _url:
-            #     continue
+    def add_collection(self, nodes, name, href, collector):
+        url = collector.normalize_url(href)
+        if not name or not self.is_collection(url):
+            return False
+        return collector.add_node(nodes, name, url) is not None
 
-            child_dic = self.collector.add_node(dic, _name, _url)
+    def parse(self, html, collector):
+        tree = lxml_html.fromstring(html)
+        result = {}
+        known_urls = set()
 
-            if isinstance(child_dic, dict):
-                child = node.xpath('./ul/li')
-                self.f3(child_dic, child)
+        menu = tree.xpath('//header//div[@data-drawer="drawer-megamenu-1"][1]')
+        if not menu:
+            raise RuntimeError('Ruffwear Shop mega menu not found')
 
-        return dic
+        shop_children = {}
+        for group in menu[0].xpath(
+            './/div[contains(concat(" ", normalize-space(@class), " "), " link-list ")]'
+        ):
+            title_nodes = group.xpath('./h2[1]')
+            title = self.text(title_nodes[0]) if title_nodes else ''
+            children = {}
+            for link in group.xpath('./ul/li/a[@href]'):
+                if self.add_collection(children, self.text(link), link.get('href') or '', collector):
+                    known_urls.add(collector.normalize_url(link.get('href') or ''))
+            if title and children:
+                collector.add_node(shop_children, title, '', children)
 
-    def f3(self, dic: dict, child_ls: list):
-        for node in child_ls:
-            a_node = node.xpath('./a')
+        if shop_children:
+            collector.add_node(result, 'Shop', '', shop_children)
 
-            if a_node:
-                _name, _url = Tool.HTML.get_a_text_and_url(a_node[0])
-            else:
-                _name = ''
-                _url = ''
-
-            if '/pages/' in _url:
+        other = {}
+        for link in tree.xpath('//a[@href]'):
+            if link.xpath('ancestor::header | ancestor::nav | ancestor::footer'):
                 continue
-            elif '/blogs/' in _url:
+            url = collector.normalize_url(link.get('href') or '')
+            if url in known_urls or not self.is_collection(url):
                 continue
-            else:
-                _url = Tool.URL.add_site(_url)
+            name = self.text(link) or urlsplit(url).path.rstrip('/').rsplit('/', 1)[-1]
+            if self.add_collection(other, name, link.get('href') or '', collector):
+                known_urls.add(url)
 
-            dic[_name] = {'url': _url, 'child': {}}
+        if other:
+            collector.add_node(result, 'Other' if 'Other' not in result else 'Other2', '', other)
+        if not result:
+            raise RuntimeError('Ruffwear navigation did not yield collection links')
+        return result
 
 
-M = CatCol(Tool,base_url,save_path)
-
-M.parser_types = (*M.parser_types,Paraer,)
+class RuffwearCatCol(ShopifyCatCol):
+    parser_types = (RuffwearMenuParser,)
 
 
 if __name__ == '__main__':
-    M.run()
+    RuffwearCatCol(
+        Tool,
+        base_url,
+        Tool.File.path_add_site('data/ml.json'),
+        Path(__file__).parent / 'ts' / '1' / 'homepage.html',
+    ).run()
+    Tool.close()
 
 
 

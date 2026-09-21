@@ -1,7 +1,7 @@
 [site]
-base_url = "https://ruffwear.com"
-site = "ruffwear.com"
-site_type = "shopify"
+base_url = ""
+site = "patagonia"
+site_type = ""
 zk = 0.3
 
 [request]

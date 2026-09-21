@@ -1,6 +1,6 @@
 [site]
-base_url = "https://ruffwear.com"
-site = "ruffwear.com"
+base_url = "https://getquip.com"
+site = "getquip.com"
 site_type = "shopify"
 zk = 0.3
 
