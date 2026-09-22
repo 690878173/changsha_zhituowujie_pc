@@ -1,12 +1,52 @@
 
+import json
+
 from _ljp import HTML
 from _ljp.mb.base import Get_Product as Step
 
 
 class Get_Product(Step):
+    linked_metadata_columns = (
+        '__source_handle', '__linked_handles', '__linked_options', '__linked_target_options',
+    )
     def __init__(self,if_wp= False,**kwargs):
         super().__init__(**kwargs)
         self.if_wp = if_wp
+
+    def linked_product_relationships(self, url, shopify_product):
+        """Site hook for explicit cross-PDP variant relationships.
+
+        The default deliberately performs no PDP request. Override only when a
+        site exposes an authoritative relation such as a swatch product handle.
+        Return ``(handles, source_options, target_options)`` or ``None``.
+        """
+        return None
+
+    def fetch_product(self, url, category):
+        """Default public-Shopify JSON collector with an optional relation hook."""
+        handle = self.tool.URL.get_handle(url)
+        try:
+            response = self.tool.get(self.tool.URL.add_site(f'/products/{handle}.json'), timeout=20)
+            if response.status_code != 200:
+                return []
+            shopify_product = response.json().get('product')
+            if not shopify_product:
+                return []
+            relationships = self.linked_product_relationships(url, shopify_product)
+        except Exception as exc:
+            self.tool.print(f'[ERROR] Product request/parse failed: {url}: {exc}')
+            return []
+
+        parent = self.shopify_to_woocommerce(
+            shopify_product, brand=self.tool.site, custom_categories=category,
+        )
+        if relationships is not None:
+            handles, source_options, target_options = relationships
+            parent['__source_handle'] = shopify_product.get('handle', handle)
+            parent['__linked_handles'] = json.dumps(handles, ensure_ascii=False)
+            parent['__linked_options'] = json.dumps(source_options, ensure_ascii=False)
+            parent['__linked_target_options'] = json.dumps(target_options, ensure_ascii=False)
+        return [parent, *self.create_variation_products(shopify_product, parent)]
 
 
     def get_woo_product(self,brand):

@@ -1,7 +1,5 @@
 """Collect native Shopify variants and explicit cross-PDP swatch links."""
 
-import json
-
 from lxml import html as lxml_html
 
 from config import Tool
@@ -52,29 +50,14 @@ class Pc(Get_Product):
             target_options.setdefault(target_handle, {})[name] = value
         return handles, source_options, target_options
 
-    def fetch_product(self, url, category):
-        handle = self.tool.URL.get_handle(url)
+    def linked_product_relationships(self, url, shopify_product):
         try:
-            product_response = self.tool.get(self.tool.URL.add_site(f'/products/{handle}.json'), timeout=20)
             page_response = self.tool.get(url, timeout=20)
-            if product_response.status_code != 200 or page_response.status_code != 200:
-                return []
-            product = product_response.json().get('product')
-            if not product:
-                return []
-            handles, source_options, target_options = self.linked_swatch_metadata(
-                page_response.text, product.get('id'),
-            )
+            if page_response.status_code != 200:
+                raise ValueError(f'PDP returned {page_response.status_code}')
+            return self.linked_swatch_metadata(page_response.text, shopify_product.get('id'))
         except Exception as exc:
-            self.tool.print(f'[ERROR] Product request/parse failed: {url}: {exc}')
-            return []
-
-        parent = self.shopify_to_woocommerce(product, brand=self.tool.site, custom_categories=category)
-        parent['__source_handle'] = product.get('handle', handle)
-        parent['__linked_handles'] = json.dumps(handles, ensure_ascii=False)
-        parent['__linked_options'] = json.dumps(source_options, ensure_ascii=False)
-        parent['__linked_target_options'] = json.dumps(target_options, ensure_ascii=False)
-        return [parent, *self.create_variation_products(product, parent)]
+            raise ValueError(f'Linked-swatch parse failed for {url}: {exc}') from exc
 
 
 if __name__ == '__main__':

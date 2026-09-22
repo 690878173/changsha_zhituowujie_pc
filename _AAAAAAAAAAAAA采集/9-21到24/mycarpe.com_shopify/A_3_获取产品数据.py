@@ -68,21 +68,21 @@ class Pc(Get_Product):
 
     def zdy_zd(self, url):
         '''返回字典格式'''
-        # res = Tool.get(url)
-        # html = etree.HTML(res.text)
-        #
-        # Tool.HTML.save(res.text)
-        # dic = {}
-        # for node in html.xpath('//div[@class="product-block product-block__collapsible_tab"]/details'):
-        #     name = node.xpath('./summary/span/text()')[0]
-        #
-        #     for i in ['Specs and Materials', 'Features']:
-        #         if i in name:
-        #             value = node.xpath('./div')[0]
-        #             dic[i] = Tool.HTML.clean_product_desc(value)
-        #             break
-        #
-        # return dic
+        res = Tool.get(url)
+        html = etree.HTML(res.text)
+
+        Tool.HTML.save(res.text)
+        dic = {}
+        for node in html.xpath('//ul[@class="pdp-new-product-info-accordion-container-inner"]/li'):
+            name = node.xpath('./button/h3/text()')[0]
+
+            for i in ['Description', 'Ingredients','How It Works']:
+                if i in name:
+                    value = node.xpath('./div')[0]
+                    dic[i] = Tool.HTML.clean_product_desc(value)
+                    break
+
+        return dic
 
     def fetch_product(self, url, category) -> list:
         Tool = self.tool
@@ -128,6 +128,47 @@ class Pc(Get_Product):
 
 
         return _products
+
+    def _validate_rows_before_cache(self, rows):
+        """Apply Type-specific cache requirements immediately before persistence."""
+        requirements = {
+            "simple": ("SKU", "Name", "Description", "Images"),
+            "variable": ("SKU", "Name", "Images"),
+            "variation": ("SKU", "Name", "Parent"),
+        }
+        for position, row in enumerate(rows, start=1):
+            if not isinstance(row, dict):
+                raise ValueError(f"商品第 {position} 行不是字典，未写入缓存")
+
+            product_type = str(row.get("Type") or "simple").strip().casefold()
+            if product_type not in requirements:
+                raise ValueError(
+                    f"商品第 {position} 行 Type 无效，未写入缓存: {row.get('Type')!r}"
+                )
+
+            missing = [
+                field
+                for field in requirements[product_type]
+                if not self._has_required_cache_value(row.get(field))
+            ]
+            if missing:
+                raise ValueError(
+                    f"商品第 {position} 行 {product_type} 必要字段缺失，未写入缓存: "
+                    + ", ".join(missing)
+                )
+
+            if product_type != "variable":
+                invalid_prices = [
+                    field
+                    for field in ("Sale price", "Regular price")
+                    if not self._has_positive_price(row.get(field))
+                ]
+                if invalid_prices:
+                    raise ValueError(
+                        f"商品第 {position} 行 {product_type} 价格无效，未写入缓存: "
+                        + ", ".join(invalid_prices)
+                    )
+            row["Stock"] = 1000
 
 
 

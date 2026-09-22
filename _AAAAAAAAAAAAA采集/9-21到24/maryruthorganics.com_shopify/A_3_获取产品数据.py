@@ -17,8 +17,8 @@ index_path = Tool.File.path_add_site('hc/4_linked_variants_v2/index.json')
 catch_path = Tool.File.path_add_site('hc/4_linked_variants_v2/catch.json')
 catch_save_num = None
 
-skip_input_url_ls = []
-skip_output_url_ls = []
+skip_input_url_ls = ["https://www.maryruthorganics.com/products/gift-card"]
+skip_output_url_ls = ["https://www.maryruthorganics.com/products/gift-card"]
 # 默认使用fieldnames=None,自动写入自定义字段，需要控制字段写入由下游控制，这里保留所有字段
 fieldnames = None
 

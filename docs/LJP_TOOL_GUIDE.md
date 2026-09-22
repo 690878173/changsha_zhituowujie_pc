@@ -334,6 +334,17 @@ The return may contain dictionaries or objects exposing `to_dic()`. It must norm
 
 Use `Tool.Product.Simple(...).to_dic()` or `Tool.Product.Variation(...).to_dic()` when the standard output schema fits. Keep HTTP/browser request and parser code inside `fetch_product`.
 
+`_ljp.mb.shopify.Get_Product.fetch_product()` is the default public-Shopify
+path: it requests only `/products/<handle>.json` and expands that product's
+native options and variants. It does not request the PDP. A site whose
+variants are split across product URLs may override
+`linked_product_relationships(url, shopify_product)`. The hook must return
+explicit `(linked_handles, source_options, target_options)` metadata from an
+authoritative page/API relation, or `None`; it must never infer a family from
+titles or option text. The base collector persists this metadata only when the
+hook returns it, so ordinary Shopify exports retain their existing schema and
+do not require a linked-variant merge stage.
+
 `stock=None` uses the standard fallback stock value. Product helpers preserve an explicit `stock=0`, but Step4's shared cache gate normalizes every successful row to `Stock=1000`.
 
 Product helpers normalize relative image links against `base_url` before they

@@ -2,8 +2,9 @@ from config import Tool
 
 # ================= 维护区：自定义字段写在这里 =================
 EXTRA_META_COLUMNS = [
-    'What you get (product.metafields.c_f.what_you_get)',
-    'Understanding noise reduction (product.metafields.c_f.understanding_noise_reduction)',
+'Details(product.metafields.c_f.details)',
+       'Features(product.metafields.c_f.features)',
+       'MaterialsCare(product.metafields.c_f.materialscare)',
 ]
 
 input_csv = Tool.File.path_add_site(r"res/picture.csv")

@@ -317,9 +317,14 @@ class GetDetail(Base):
         self.Tool.print("所有分类抓取完成，开始汇总输出最终详情链接……", color='green')
 
         res_dic = self.output_res()
-        total = sum(len(v) for v in res_dic.values())
+
+        ls = []
+        for j in res_dic.values():
+            ls.extend(j)
+
+        total = len(ls)
         self.Tool.print(
-            f"任务全部完成！汇总详情 URL 总数：{total}，结果保存至 {self.save_path}",
+            f"任务全部完成！汇总详情 URL 总数：{total}，去重后:{len(list(dict.fromkeys(ls)))}结果保存至 {self.save_path}",
             color='green',
         )
         self.close()

@@ -22,5 +22,5 @@ class Pc(Replace_imgs):
 if __name__ == '__main__':
     pc = Pc(Tool,input_path=csv_input_path,output_path=csv_output_path)
     pc.run()
-    # wb = Tool.File.Web(csv_output_path)
-    # wb.run('fail/失败图片链接.csv')
+    wb = Tool.File.Web(csv_output_path)
+    wb.run('fail/失败图片链接.csv')
