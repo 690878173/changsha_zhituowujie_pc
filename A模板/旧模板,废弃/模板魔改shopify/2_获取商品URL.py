@@ -52,7 +52,10 @@ def build_urls(
             uniq.update(result[cat])
             completed.add(cat)
             fr = [r for r in fr if r.get("category") != cat]
-            Tool.print(f"[URL] {idx}/{len(items)} {cat}: {len(links)}个", "green")
+            Tool.print(
+                f"[URL] {idx}/{len(items)} {cat}: {len(links)}个",
+                "red" if not links else "green",
+            )
         except Exception as e:
             result.setdefault(cat, [])
             fr.append({"category": cat, "url": curl, "reason": str(e)})
@@ -65,7 +68,10 @@ def build_urls(
             prog,
         )
     Tool.File.save_json(result, out)
-    Tool.print(f"商品URL={len(uniq)} 分类={len(result)} 失败={len(fr)}", "green")
+    Tool.print(
+        f"商品URL={len(uniq)} 分类={len(result)} 失败={len(fr)}",
+        "red" if not uniq else "green",
+    )
     return result
 
 

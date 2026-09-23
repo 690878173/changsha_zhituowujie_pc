@@ -94,7 +94,7 @@ def main():
 
             if len(detail_urls) == 0:
                 fail_ls.append(url_data)
-                Tool.print(f"--- 分类 [{name}] 处理完毕，未获得链接 ---")
+                Tool.print(f"--- 分类 [{name}] 处理完毕，未获得链接 ---", color='red')
                 continue
 
             print(f"--- 分类 [{name}] 处理完毕，总计获得 {len(detail_urls)} 个链接 ---")
@@ -107,7 +107,10 @@ def main():
     Tool.File.save_json(result, save_path)
 
     total_count = sum(len(v) for v in result.values())
-    print(f"\n任务结束！总共抓取到 {total_count} 条详情页链接，已保存到 {save_path}")
+    Tool.print(
+        f"\n任务结束！总共抓取到 {total_count} 条详情页链接，已保存到 {save_path}",
+        color='red' if total_count == 0 else 'green',
+    )
     if len(fail_ls) > 0:
         Tool.print(f"   [!] 抓取失败的分类有 {len(fail_ls)} 个,具体url:\n{fail_ls}")
 

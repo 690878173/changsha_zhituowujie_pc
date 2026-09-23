@@ -54,6 +54,17 @@ class DetailOrderStep(GetDetail):
         return ["product-a", "product-b", "product-a", "product-c"], None
 
 
+class GiftCardDetailStep(GetDetail):
+    def fetch_page(self, page, params):
+        return ["product-a", "gift-card", "product-b", "gift_card"], None
+
+
+class EmptyDetailStep(GetDetail):
+    def fetch_page(self, page, params):
+        page.set_end()
+        return [], None
+
+
 class ProductOrderStep(Get_Product):
     delays = {"slow": 0.06, "fast": 0.01, "middle": 0.03}
 
@@ -170,6 +181,56 @@ class StepOrderTests(unittest.TestCase):
             next(iter(cached_page.values()))["data"],
             ["product-a", "product-b", "product-c"],
         )
+
+    def test_detail_page_excludes_only_configured_internal_urls(self):
+        tool = MemoryTool({"input": {"Category": ["collection"]}})
+        step = GiftCardDetailStep(
+            tool=tool,
+            input_path="input",
+            output_path="detail-output",
+            catch_path="detail-catch",
+            index_path="detail-index",
+        )
+
+        step.get_detail_url(PageModel(url="collection", next_url="collection", page=1))
+
+        cached_page = next(iter(step.index.data.values()))
+        self.assertEqual(next(iter(cached_page.values()))["data"], ["product-a", "product-b"])
+
+    def test_detail_summary_filters_internal_urls_from_existing_cache(self):
+        tool = MemoryTool({"input": {"Category": ["collection"]}})
+        step = DetailOrderStep(
+            tool=tool,
+            input_path="input",
+            output_path="detail-output",
+            catch_path="detail-catch",
+            index_path="detail-index",
+        )
+        step.index.append(
+            "cached-page",
+            "collection",
+            {"data": ["product-a", "gift-card", "product-b"], "next_url": None, "end": True},
+        )
+        step.catch.append("Category", "cached-page", "collection")
+
+        self.assertEqual(step.output_res(), {"Category": ["product-a", "product-b"]})
+
+    def test_zero_detail_summary_is_red(self):
+        tool = MemoryTool({"input": {"Empty": ["collection"]}})
+        printed = []
+        tool.print = lambda message, **kwargs: printed.append((message, kwargs.get("color")))
+        step = EmptyDetailStep(
+            tool=tool,
+            input_path="input",
+            output_path="detail-output",
+            catch_path="detail-catch",
+            index_path="detail-index",
+        )
+
+        step.run()
+
+        self.assertIn(("  分类「Empty」：汇总到 0 条商品链接。", "red"), printed)
+        self.assertTrue(any("汇总详情 URL 总数：0" in message and color == "red" for message, color in printed))
 
     def test_product_output_keeps_current_task_order_for_new_and_cached_tasks(self):
         input_data = {"First": ["slow", "fast"], "Second": ["middle"]}

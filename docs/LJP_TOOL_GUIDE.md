@@ -384,6 +384,13 @@ fallbacks live in these classes; only task persistence and detail caching are
 provided by `_ljp`. Amazon `Step4` defaults to one worker, matching the source
 crawler. Configure a DrissionPage browser for `Step1`:
 
+When an Amazon `Step2` page has no variation payload, it provisionally keeps
+the source ASIN in the detail-task output as a possible simple product and
+marks that page failed. The shared Step2 retry batch tries it once more in the
+same run; if it remains empty, the ASIN stays in the output and is cached with
+a failure marker, so a later run retries its variation lookup
+again instead of treating the provisional simple-product ASIN as complete.
+
 ```python
 from _ljp.mb.amazon import Step1, Step2, Step4, Quchong, Step7, Step8WpToShopify
 
@@ -478,6 +485,10 @@ The shared cache models are `Catch` and `Index` in `_ljp/mb/model.py`
 - `Catch`: `category -> task_id -> {'url': url}`.
 - `Index`: `url -> task_id -> cached_data`.
 - Step2 index values are page metadata dictionaries containing `data`, `next_url`, and `end`.
+- A site may cache provisional Step2 fallback data after the final failed retry
+  with `fail: true`. Such entries remain available to downstream output, but
+  are deliberately re-requested on the next run rather than treated as cache
+  hits.
 - Step4 index values are normalized product-row lists.
 - Step4 marks the cache as changed when it adds an index result or a new
   category-task mapping. The writer flushes after `catch_save_num` changes and
@@ -781,6 +792,10 @@ Output is again `{category: [detail_url, ...]}`. URLs are deduplicated per
 page and again while aggregating categories while retaining first-seen order.
 The final aggregation follows category/page traversal order, and each page
 retains the order returned by `fetch_page`.
+Default Step2 filtering excludes only URLs containing an entry from
+`skip_in_url_ls` (gift-card variants by default); all other product URLs are
+retained. A zero-product page, category summary, or final summary is printed
+in red so an empty result is visible in normal run output.
 `skip_input_url_ls` skips source category URLs; `skip_output_url_ls` removes
 detail URLs from both page output and final aggregation. `ts_num` limits the
 number of input categories, not the number of products.

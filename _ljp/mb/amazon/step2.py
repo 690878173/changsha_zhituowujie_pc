@@ -119,6 +119,11 @@ from _ljp.mb.model import PageModel
 
 class YMXStep2(GetDetail):
 
+    def failed_page_cache_data(self, P: PageModel):
+        if P.extra.get('fallback_simple_asin'):
+            return [P.url]
+        return None
+
     def output_res(self):
         # 扁平化 index：index_id -> data 列表，解决分页数据按 next_url 存储导致汇总丢失的问题
         global_data = {}
@@ -145,7 +150,23 @@ class YMXStep2(GetDetail):
             ls = list(dict.fromkeys(ls))
             ls = [u for u in ls if u not in self.skip_output_url_ls]
             res_dic[name] = ls
-            self.Tool.print(f"  分类「{name}」：汇总到 {len(ls)} 条商品链接。", color='cyan')
+
+        # Amazon occasionally omits the variation payload for a simple ASIN.
+        # Keep that ASIN in the next step's input, but leave this page failed
+        # so the shared Step2 retry path checks it again on later runs.
+        for item in self.failed_pages.values():
+            page = item['pagemodel']
+            if not page.extra.get('fallback_simple_asin'):
+                continue
+            name = item['name']
+            res_dic.setdefault(name, []).append(page.url)
+
+        for name, asins in res_dic.items():
+            res_dic[name] = list(dict.fromkeys(asins))
+            self.Tool.print(
+                f"  分类「{name}」：汇总到 {len(res_dic[name])} 条商品链接。",
+                color='red' if not res_dic[name] else 'cyan',
+            )
 
         self.Tool.File.save_json(res_dic, self.save_path)
 
@@ -182,8 +203,10 @@ class YMXStep2(GetDetail):
             if variants:
                 print(f"    ✅ 成功提取到 {len(variants)} 个关联变体")
             else:
-                P.set_end()
-                print("    ⚠️ 该页面未发现任何变体数据")
+                P.extra['fallback_simple_asin'] = True
+                P.set_fail()
+                variants = [P.url]
+                print("    ⚠️ 该页面未发现任何变体数据，暂按单品保留并标记补抓")
 
             time.sleep(1)
 

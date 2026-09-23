@@ -2,9 +2,8 @@ from config import Tool
 
 # ================= 维护区：自定义字段写在这里 =================
 EXTRA_META_COLUMNS = [
-    'Benefits(product.metafields.c_f.benefits)',
-    'Ingredients(product.metafields.c_f.ingredients)',
-    'Directions(product.metafields.c_f.directions)',
+    'Fabric(product.metafields.c_f.fabric)',
+    'SizeFit(product.metafields.c_f.sizefit)',
 ]
 
 input_csv = Tool.File.path_add_site(r"res/picture.csv")

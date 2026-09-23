@@ -14,7 +14,7 @@ TYPE_ALIASES = {
     # 自建模板依赖空 site_type 生成历史兼容的输出文件名。
     "self_hosted": ("新_模板自建", "self_hosted", ""),
     "target": ("新_模板target", "target", "target"),
-    "amazon": ("新_模板亚马逊", "amazon", "amazon"),
+    "amazon": ("sheamoisture_亚马逊", "amazon", "amazon"),
 }
 
 

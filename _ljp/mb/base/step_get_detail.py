@@ -73,6 +73,19 @@ class GetDetail(Base):
     def after_one_request(self, p:PageModel):
         pass
 
+    def failed_page_cache_data(self, p: PageModel):
+        """Return provisional data to cache after the final failed retry.
+
+        The default keeps failed pages out of the cache. Site collectors can
+        return fallback detail tasks here when those tasks remain useful while
+        the source page is retried on a later run.
+        """
+        return None
+
+    def is_skipped_internal_url(self, url: object) -> bool:
+        normalized_url = str(url or "").casefold()
+        return any(fragment.casefold() in normalized_url for fragment in self.skip_in_url_ls)
+
     @staticmethod
     def _failed_page_key(name, pagemodel):
         return name, pagemodel.url
@@ -114,7 +127,8 @@ class GetDetail(Base):
 
         子类可在 fetch_page 内设置 page.status 标记本页状态：
             'end'  - 确认已到头/无数据（含无效地址），写入缓存，下次直接跳过
-            'fail' - 请求失败（临时性），不写缓存，下次重新请求
+            'fail' - 请求失败（临时性），通常不写缓存并在下次重新请求；
+                     子类可在最终补抓后保留带 ``fail`` 标记的回退数据
             不设置 - 按正常结果处理
         """
         params = self.build_params(pagemodel)
@@ -122,7 +136,7 @@ class GetDetail(Base):
         catch = self.index.check(pagemodel.url, index_id)
 
         # 命中缓存：确认到头，或缓存内有数据
-        if catch:
+        if catch and not catch.get('fail'):
             catch_data = catch.get('data')
             if catch.get('end'):
                 pagemodel.next_url = None
@@ -140,23 +154,20 @@ class GetDetail(Base):
         pagemodel.is_next = bool(next_link)
         pagemodel.next_url = next_link if pagemodel.is_next else None
 
-        # 失败不写缓存，下次重试
+        # Failures skip normal caching. A final-retry fallback may be cached
+        # by ``failed_page_cache_data`` in ``get_all_detail_url``.
         if pagemodel.is_fail():
             return index_id, False, False, 0
         # Keep the source page order while removing duplicate detail URLs.
         product_urls = list(dict.fromkeys(product_urls or []))
-        ls = []
-        for i in product_urls:
-            for j in self.skip_in_url_ls:
-                if j in i:
-                    break
-            else:
-                continue
-
-            ls.append(i)
+        product_urls = [
+            url
+            for url in product_urls
+            if not self.is_skipped_internal_url(url)
+        ]
 
         if len(product_urls) == 0:
-            self.Tool.print(f'url数量为0,{pagemodel.url}', color='yellow')
+            self.Tool.print(f'url数量为0,{pagemodel.url}', color='red')
         self.index.append(index_id, pagemodel.url, {
             'data': product_urls,
             'next_url': pagemodel.next_url,
@@ -182,10 +193,22 @@ class GetDetail(Base):
                 self.Tool.print(
                     f"【分类 {category_idx}/{self.total_category} | {name}】"
                     f"第 {pagemodel.page} 页命中缓存，商品 {count} 条：{pagemodel.url}",
-                    color='green',
+                    color='red' if count == 0 else 'green',
                 )
             elif pagemodel.is_fail():
                 self._record_failed_page(name, category_idx, pagemodel, retry)
+                if retry:
+                    fallback_data = self.failed_page_cache_data(pagemodel)
+                    if fallback_data is not None:
+                        fallback_data = list(dict.fromkeys(fallback_data))
+                        self.index.append(index_id, pagemodel.url, {
+                            'data': fallback_data,
+                            'next_url': None,
+                            'end': False,
+                            'fail': True,
+                        })
+                        self.catch.append(name, index_id, pagemodel.url)
+                        self.save_catch()
                 self.Tool.print(
                     f"【分类 {category_idx}/{self.total_category} | {name}】"
                     f"第 {pagemodel.page} 页抓取失败，"
@@ -198,7 +221,7 @@ class GetDetail(Base):
                 self.Tool.print(
                     f"【分类 {category_idx}/{self.total_category} | {name}】"
                     f"第 {pagemodel.page} 页抓取成功，商品 {count} 条：{pagemodel.url}",
-                    color='green',
+                    color='red' if count == 0 else 'green',
                 )
 
                 _num += 1
@@ -252,9 +275,16 @@ class GetDetail(Base):
             for seq_id in seq_dict:
                 ls.extend(global_data.get(seq_id, []))
             ls = list(dict.fromkeys(ls))
-            ls = [u for u in ls if u not in self.skip_output_url_ls]
+            ls = [
+                url
+                for url in ls
+                if not self.is_skipped_internal_url(url) and url not in self.skip_output_url_ls
+            ]
             res_dic[name] = ls
-            self.Tool.print(f"  分类「{name}」：汇总到 {len(ls)} 条商品链接。", color='cyan')
+            self.Tool.print(
+                f"  分类「{name}」：汇总到 {len(ls)} 条商品链接。",
+                color='red' if not ls else 'cyan',
+            )
 
         self.Tool.File.save_json(res_dic, self.save_path)
 
@@ -325,7 +355,7 @@ class GetDetail(Base):
         total = len(ls)
         self.Tool.print(
             f"任务全部完成！汇总详情 URL 总数：{total}，去重后:{len(list(dict.fromkeys(ls)))}结果保存至 {self.save_path}",
-            color='green',
+            color='red' if total == 0 else 'green',
         )
         self.close()
         return res_dic

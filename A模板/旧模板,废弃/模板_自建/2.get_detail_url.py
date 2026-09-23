@@ -183,10 +183,17 @@ class Sc(object):
             # 最终输出再次过滤黑名单
             ls = [u for u in ls if u not in output_url_no_ls]
             res_dic[name] = ls
+            Tool.print(
+                f"  分类「{name}」：汇总到 {len(ls)} 条商品链接。",
+                color='red' if not ls else 'cyan',
+            )
 
         Tool.File.save_json(res_dic, save_path)
         total = sum(len(v) for v in res_dic.values())
-        Tool.print(f"\n✅ 任务全部完成！汇总详情URL总数：{total}，结果保存至 {save_path}", color='green')
+        Tool.print(
+            f"\n✅ 任务全部完成！汇总详情URL总数：{total}，结果保存至 {save_path}",
+            color='red' if total == 0 else 'green',
+        )
 
 
 if __name__ == '__main__':

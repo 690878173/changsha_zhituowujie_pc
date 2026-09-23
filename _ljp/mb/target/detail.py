@@ -208,7 +208,10 @@ class GetDetail:
         }
         self.Tool.File.save_json(res_dic, self.output_path)
 
-        print(f"\n任务完成！共计 {len(final_results)} 个链接已保存至: {self.output_path}")
+        self.Tool.print(
+            f"\n任务完成！共计 {len(final_results)} 个链接已保存至: {self.output_path}",
+            color='red' if not final_results else 'green',
+        )
 
 
 

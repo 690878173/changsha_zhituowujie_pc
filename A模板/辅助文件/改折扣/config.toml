@@ -1,0 +1,17 @@
+[site]
+base_url = ""
+site = ""
+site_type = ""
+zk = 0.4
+
+[request]
+max_retry = 3
+time_out = 30
+headers = ""
+cookies = ""
+images_split = ""
+custom_key = ""
+
+[request.browser]
+enabled = false
+
