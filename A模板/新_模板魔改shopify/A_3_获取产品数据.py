@@ -1,3 +1,5 @@
+from lxml import etree
+
 from config import Tool
 from _ljp.mb.mg_shopify import Get_Product
 
@@ -32,21 +34,28 @@ class Pc(Get_Product):
     def zdy_zd(self, url, html_text=None):
         """返回 GraphQL 未提供的站点自定义字段。"""
 
-        # res = Tool.get(url)
-        # html = etree.HTML(res.text)
-        #
-        # Tool.HTML.save(res.text)
-        # dic = {}
-        # for node in html.xpath('//div[@class="product-block product-block__collapsible_tab"]/details'):
-        #     name = node.xpath('./summary/span/text()')[0]
-        #
-        #     for i in ['Specs and Materials', 'Features']:
-        #         if i in name:
-        #             value = node.xpath('./div')[0]
-        #             dic[name] = Tool.HTML.clean_product_desc(value)
-        #             break
-        #
-        # return dic
+        res = Tool.get(url)
+        html = etree.HTML(res.text)
+
+        Tool.HTML.save(res.text)
+        dic = {}
+        for node in html.xpath('//div[@class="product-block product-block__collapsible_tab"]/details'):
+            name = node.xpath('./summary/span/text()')[0]
+
+            for i in ['Details', 'Features']:
+                if i in name:
+                    value = node.xpath('./div')[0]
+                    dic[i] = Tool.HTML.clean_product_desc(value)
+                    break
+
+            else:
+                for j in ['Navy', 'Toddler PJ Size Comparison']:
+                    if j in name:
+                        break
+                else:
+                    print(f'未知字段:{name}')
+
+        return dic
 
 
 if __name__ == "__main__":

@@ -73,12 +73,16 @@ class Pc(Get_Product):
 
         Tool.HTML.save(res.text)
         dic = {}
-        for node in html.xpath('//div[@class="product-block product-block__collapsible_tab"]/details'):
-            name = node.xpath('./summary/span/text()')[0]
+        for node in html.xpath('//div[@class="product-tabs__content"]/div'):
+            name = node.xpath('./button/text()')
+            if not name:
+                continue
+            else:
+                name = name[0].strip()
 
             for i in ['Details', 'Features']:
                 if i in name:
-                    value = node.xpath('./div')[0]
+                    value = node.xpath('./collapsible-content/div')[0]
                     dic[i] = Tool.HTML.clean_product_desc(value)
                     break
 
@@ -88,6 +92,18 @@ class Pc(Get_Product):
                         break
                 else:
                     print(f'未知字段:{name}')
+
+
+        if not dic:
+            name_ls = html.xpath('//div[@class="tabs-nav__item-list"]/button/text()')
+            value_ls = html.xpath('//div[@class="product-tabs__content"]/div')
+            for index,name in enumerate(name_ls):
+                for i in ['Details', 'Features']:
+                    if i in name:
+                        value = value_ls[index]
+                        dic[i] = Tool.HTML.clean_product_desc(value)
+                        break
+
 
         return dic
 
