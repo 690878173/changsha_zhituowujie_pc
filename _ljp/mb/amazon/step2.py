@@ -124,6 +124,62 @@ class YMXStep2(GetDetail):
             return [P.url]
         return None
 
+    def build_variant_parent_map(self):
+        """Collapse overlapping Amazon variation lists into one product family."""
+        parent = {}
+        rank = {}
+        page_order = []
+
+        def add(asin):
+            if asin not in parent:
+                parent[asin] = asin
+                rank[asin] = 0
+
+        def find(asin):
+            root = asin
+            while parent[root] != root:
+                root = parent[root]
+            while parent[asin] != asin:
+                next_asin = parent[asin]
+                parent[asin] = root
+                asin = next_asin
+            return root
+
+        def union(left, right):
+            left_root = find(left)
+            right_root = find(right)
+            if left_root == right_root:
+                return
+            if rank[left_root] < rank[right_root]:
+                left_root, right_root = right_root, left_root
+            parent[right_root] = left_root
+            if rank[left_root] == rank[right_root]:
+                rank[left_root] += 1
+
+        for page_asin, pages in self.index.data.items():
+            if not isinstance(page_asin, str) or not page_asin:
+                continue
+            add(page_asin)
+            page_order.append(page_asin)
+            if not isinstance(pages, dict):
+                continue
+            for page_data in pages.values():
+                if not isinstance(page_data, dict):
+                    continue
+                for variant_asin in page_data.get('data', []):
+                    if not isinstance(variant_asin, str) or not variant_asin:
+                        continue
+                    add(variant_asin)
+                    union(page_asin, variant_asin)
+
+        canonical = {}
+        for page_asin in page_order:
+            canonical.setdefault(find(page_asin), page_asin)
+        return {
+            asin: canonical[find(asin)]
+            for asin in parent
+        }
+
     def output_res(self):
         # 扁平化 index：index_id -> data 列表，解决分页数据按 next_url 存储导致汇总丢失的问题
         global_data = {}
@@ -134,11 +190,7 @@ class YMXStep2(GetDetail):
                 if isinstance(item, dict):
                     global_data[index_id] = item.get('data', [])
 
-        ys_dic = {}
-        for parent_id,data in self.index.data.items():
-            for zl_data in data.values():
-                for zl_id in zl_data['data']:
-                    ys_dic[zl_id] = parent_id
+        ys_dic = self.build_variant_parent_map()
         self.Tool.File.save_json(ys_dic,self.Tool.File.path_add_site('data/变体id映射表.json'))
 
 

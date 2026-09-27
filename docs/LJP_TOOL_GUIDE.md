@@ -384,6 +384,13 @@ fallbacks live in these classes; only task persistence and detail caching are
 provided by `_ljp`. Amazon `Step4` defaults to one worker, matching the source
 crawler. Configure a DrissionPage browser for `Step1`:
 
+Amazon variation payloads may overlap when different ASIN pages expose the
+same family. `Step2` therefore merges overlapping ASIN lists into one family
+and writes every member to the same canonical parent ASIN in
+`data/变体id映射表.json`; it never emits a nested parent chain. Rebuild this
+mapping from Step2's cache before rerunning downstream product steps after an
+older run produced nested parents.
+
 When an Amazon `Step2` page has no variation payload, it provisionally keeps
 the source ASIN in the detail-task output as a possible simple product and
 marks that page failed. The shared Step2 retry batch tries it once more in the

@@ -65,6 +65,11 @@ from _ljp.mb.shopify import Get_Product
 
 
 class Pc(Get_Product):
+    requirements = {
+        "simple": ("SKU", "Name", "Description", "Images"),
+        "variable": ("SKU", "Name", "Description", "Images"),
+        "variation": ("SKU", "Name", "Parent"),
+    }
 
     def zdy_zd(self, url):
         '''返回字典格式'''

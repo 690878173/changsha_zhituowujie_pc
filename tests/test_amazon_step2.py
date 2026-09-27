@@ -46,6 +46,34 @@ class MemoryTool:
 
 
 class AmazonStep2Tests(unittest.TestCase):
+    def test_overlapping_variant_lists_share_one_parent(self):
+        tool = MemoryTool({"input": {"Category": ["root", "middle"]}})
+        step = YMXStep2(
+            tool=tool,
+            input_path="input",
+            output_path="output",
+            catch_path="catch",
+            index_path="index",
+        )
+        step.index.append(
+            "root-page",
+            "root",
+            {"data": ["root", "middle"], "next_url": None, "end": True},
+        )
+        step.index.append(
+            "middle-page",
+            "middle",
+            {"data": ["middle", "child"], "next_url": None, "end": True},
+        )
+        step.catch.append("Category", "root-page", "root")
+        step.catch.append("Category", "middle-page", "middle")
+
+        self.assertEqual(step.output_res(), {"Category": ["root", "middle", "child"]})
+        self.assertEqual(
+            tool.File.data["data/变体id映射表.json"],
+            {"root": "root", "middle": "root", "child": "root"},
+        )
+
     def test_empty_variants_keep_source_asin_and_retry_it(self):
         asin = "B000000000"
         tool = MemoryTool({"input": {"Category": [asin]}})

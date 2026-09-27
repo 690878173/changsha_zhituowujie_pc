@@ -35,6 +35,9 @@
       <excludeFolder url="file://$MODULE_DIR$/9-17/clorox_target/html" />
       <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-7到9-12" />
       <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集" />
+      <excludeFolder url="file://$MODULE_DIR$/9-24/casetify.com_自建/hc" />
+      <excludeFolder url="file://$MODULE_DIR$/9-24/casetify.com_自建/res" />
+      <excludeFolder url="file://$MODULE_DIR$/9-24/casetify.com_自建/ts" />
     </content>
     <content url="file://$MODULE_DIR$/8-10到8-15/hoka_自建/hc/3" />
     <content url="file://$MODULE_DIR$/9-16/chubbiesshorts_魔改shopify" />
@@ -55,8 +58,11 @@
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/turtleboxaudio_shopify" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/vanicream_target" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-3到8-8/lumedeodorant" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-14到9-19/magicspoon_shopify" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-14到9-19/owletcare_shopify" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-21到24/wetnwildbeauty.com_shopify" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-7到9-12/summerfridays_shopify" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-7到9-12/tweezerman_shopify" />
     <orderEntry type="jdk" jdkName="uv (changsha_zhituowujie_pc)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>

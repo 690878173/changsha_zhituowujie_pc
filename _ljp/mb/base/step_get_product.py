@@ -15,6 +15,12 @@ from _ljp.mb.model import Catch, Index,Base
 class Get_Product(Base):
     """商品详情抓取基类"""
 
+    requirements = {
+        "simple": ("SKU", "Name", "Description", "Images"),
+        "variable": ("SKU", "Name", "Description", "Images"),
+        "variation": ("SKU", "Name", "Parent"),
+    }
+
     def __init__(self, tool,
                  input_path,
                  output_path,
@@ -151,11 +157,7 @@ class Get_Product(Base):
 
     def _validate_rows_before_cache(self, rows):
         """Apply Type-specific cache requirements immediately before persistence."""
-        requirements = {
-            "simple": ("SKU", "Name", "Description", "Images"),
-            "variable": ("SKU", "Name", "Description", "Images"),
-            "variation": ("SKU", "Name", "Parent"),
-        }
+        requirements = self.requirements
         for position, row in enumerate(rows, start=1):
             if not isinstance(row, dict):
                 raise ValueError(f"商品第 {position} 行不是字典，未写入缓存")
@@ -240,7 +242,6 @@ class Get_Product(Base):
         else:
             cat_str = category
 
-        # 2. 拼接并用 MD5 生成 32 位哈希
         raw = f"{url}||{cat_str}"
         return hashlib.md5(raw.encode('utf-8')).hexdigest()
 

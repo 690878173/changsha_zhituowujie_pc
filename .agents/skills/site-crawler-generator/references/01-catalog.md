@@ -23,10 +23,21 @@ URL 必须经 `Tool.URL.add_site()` 规范为绝对链接。不要手写路径�
 URL为站点基地址或带有'/'的基地址,全部替换为空字符。
 
 禁止导航扁平化
+
+## 新站点首次运行保护
+
+模板生成完成后，在首次联网运行目录脚本前必须检查并完成以下项目：
+
+1. `CatCol` 的快照参数必须是站点目录内的 `Path(__file__).parent / 'ts' / '01-catalog' / 'homepage.html'`；不得使用模板遗留的 `1.html` 或任何站点根目录文件名。
+2. 依据首页实际 DOM、hydration 数据或公开导航接口，使用匹配该站点结构的 `CatalogParser`。自定义解析器必须实现 `matches()` 与 `parse()`；继承 `BaseCatalogParser` 时，`f1`/`f2`/`f3` 必须向 `collector.add_node()` 传入真实 collection URL，不能只添加无 URL 的菜单标题。
+3. 首次解析后立即读取 `data/<site>_ml.json`，确认至少有一个 collection URL。空 JSON、仅含无 URL 分组或没有 collection URL 均为解析失败，必须修正站点解析器后重跑，不能交付空目录。
+
+首页其余区域补充进 `Other` 前，先收集桌面与移动导航内的全部规范化 collection URL；已在任一导航版本中出现的 URL 不得再次进入 `Other`。`Other` 内也按规范化 URL 去重，但同一 URL 在不同真实导航分类路径下仍应保留。
+
 ## 流程和验收
 
 1. 通过 `CatCol(Tool, base_url, Tool.File.path_add_site('data/ml.json'), snapshot_path).run()` 运行模板。只有调试需要完整脚本时才使用 `Tool.HTML.save_raw`。
 2. 从首页 DOM、hydration/Next 数据或公开导航接口递归提取菜单，保留真实父子关系。发现 `Shop All` 或 `All Products` 后仍必须继续收集其他公开目录。
-3. 验证至少两个非空分组和两个 collection 叶子；若站点确实没有更多分类，记录导航/采样页面证据。检查输出中没有产品、博客、页面等非 collection URL。
+3. 验证至少两个非空分组和两个 collection 叶子；若站点确实没有更多分类，记录导航/采样页面证据。检查输出中没有产品、博客、页面等非 collection URL；统计输出条数并确认它大于零。
 4. 阶段 2 直接读取该映射；不得将其替换为单一全量商品页或手工构造分类名称。
 5. 必须输出结构，检查层级是否缺少，若用户给出层级，必须检查是否完成目标。统计扁平 JSON 键中的逗号分段，确认最大目录深度不超过三级；抽样确认被合并的布局标题及其原子分类处于同级，真实业务父子分类仍处于相邻层级。
