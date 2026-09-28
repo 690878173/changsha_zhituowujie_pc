@@ -1,0 +1,13 @@
+from config import Tool
+from _ljp.mb.target import Quchong
+
+
+input_file = Tool.File.path_add_site('res/result.csv')
+output_file = Tool.File.path_add_site('fwq/quchong.csv')
+
+
+if __name__ == '__main__':
+    try:
+        Quchong(Tool, input_file=input_file, output_file=output_file).run()
+    finally:
+        Tool.close()

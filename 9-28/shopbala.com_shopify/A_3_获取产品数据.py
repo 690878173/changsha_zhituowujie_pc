@@ -14,8 +14,8 @@ index_path = Tool.File.path_add_site('hc/4/index.json')
 catch_path = Tool.File.path_add_site('hc/4/catch.json')
 catch_save_num = None
 
-skip_input_url_ls = []
-skip_output_url_ls = []
+skip_input_url_ls = ['https://shopbala.com/products/gift-message']
+skip_output_url_ls = ['https://shopbala.com/products/gift-message']
 # 默认使用fieldnames=None,自动写入自定义字段，需要控制字段写入由下游控制，这里保留所有字段
 fieldnames = None
 
@@ -66,8 +66,8 @@ from _ljp.mb.shopify import Get_Product
 
 class Pc(Get_Product):
     requirements = {
-        "simple": ("SKU", "Name", "Description", "Images"),
-        "variable": ("SKU", "Name", "Description", "Images"),
+        "simple": ("SKU", "Name", "Images"),
+        "variable": ("SKU", "Name", "Images"),
         "variation": ("SKU", "Name", "Parent"),
     }
 
@@ -78,10 +78,10 @@ class Pc(Get_Product):
 
         Tool.HTML.save(res.text)
         dic = {}
-        for node in html.xpath('//div[@class="product-block product-block__collapsible_tab"]/details'):
-            name = node.xpath('./summary/span/text()')[0]
+        for node in html.xpath('//dropdown-item/div'):
+            name = node.xpath('./button/text()')[0]
 
-            for i in ['Details', 'Features']:
+            for i in ['Features','Benefits','Details']:
                 if i in name:
                     value = node.xpath('./div')[0]
                     dic[i] = Tool.HTML.clean_product_desc(value)

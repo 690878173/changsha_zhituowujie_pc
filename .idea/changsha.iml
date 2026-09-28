@@ -27,7 +27,6 @@
       <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/cricut.com_自建" />
       <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/kuiu_自建" />
       <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/mugsyjeans_target" />
-      <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/pourri_shopify" />
       <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/salomon_自建" />
       <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/turtleboxaudio_shopify" />
       <excludeFolder url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/vanicream_target" />
@@ -49,6 +48,7 @@
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-17到8-22/patagonia_自建" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-24到8-29/govee_亚马逊" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-24到8-29/huckberry_自建" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-24到8-29/liquiddeath_亚马逊" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/cricut.com_自建" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/gocontigo_亚马逊" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/kuiu_自建" />
@@ -58,9 +58,14 @@
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/turtleboxaudio_shopify" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-31到9-5/vanicream_target" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/8-3到8-8/lumedeodorant" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-14到9-19/chubbiesshorts_魔改shopify" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-14到9-19/ensure_target" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-14到9-19/magicspoon_shopify" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-14到9-19/owletcare_shopify" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-14到9-19/pampers.com_自建" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-14到9-19/pampers_亚马逊" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-21到24/wetnwildbeauty.com_shopify" />
+    <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-7到9-12/liquiddeath_shopify" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-7到9-12/summerfridays_shopify" />
     <content url="file://$MODULE_DIR$/_AAAAAAAAAAAAA采集/9-7到9-12/tweezerman_shopify" />
     <orderEntry type="jdk" jdkName="uv (changsha_zhituowujie_pc)" jdkType="Python SDK" />

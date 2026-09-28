@@ -345,6 +345,11 @@ titles or option text. The base collector persists this metadata only when the
 hook returns it, so ordinary Shopify exports retain their existing schema and
 do not require a linked-variant merge stage.
 
+The public Shopify collector does not expose a `zdy_zd()` PDP hook. Keep
+ordinary Shopify sites on its JSON-only path unless an authoritative
+cross-product relationship requires `linked_product_relationships()`.
+`zdy_zd(url, html_text)` is the magic-Shopify collector's site-only hook.
+
 `stock=None` uses the standard fallback stock value. Product helpers preserve an explicit `stock=0`, but Step4's shared cache gate normalizes every successful row to `Stock=1000`.
 
 Product helpers normalize relative image links against `base_url` before they

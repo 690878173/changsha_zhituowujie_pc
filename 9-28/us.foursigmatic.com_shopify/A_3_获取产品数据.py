@@ -66,8 +66,8 @@ from _ljp.mb.shopify import Get_Product
 
 class Pc(Get_Product):
     requirements = {
-        "simple": ("SKU", "Name", "Description", "Images"),
-        "variable": ("SKU", "Name", "Description", "Images"),
+        "simple": ("SKU", "Name", "Images"),
+        "variable": ("SKU", "Name", "Images"),
         "variation": ("SKU", "Name", "Parent"),
     }
 
@@ -78,17 +78,19 @@ class Pc(Get_Product):
 
         Tool.HTML.save(res.text)
         dic = {}
-        for node in html.xpath('//div[@class="product-block product-block__collapsible_tab"]/details'):
-            name = node.xpath('./summary/span/text()')[0]
+        name_ls = html.xpath('//div[@aria-label="Product information"]/button/text()')
+        value_ls = html.xpath('//div[@class="pdp-tabs__panels"]/div')
+        for index,node in enumerate(name_ls):
+            name = node
 
-            for i in ['Details', 'Features']:
+            for i in ['Taste', 'Benefits','Ingredients']:
                 if i in name:
-                    value = node.xpath('./div')[0]
+                    value = value_ls[index]
                     dic[i] = Tool.HTML.clean_product_desc(value)
                     break
 
             else:
-                for j in ['Shipping & Returns']:
+                for j in ['FAQs']:
                     if j in name:
                         break
                 else:

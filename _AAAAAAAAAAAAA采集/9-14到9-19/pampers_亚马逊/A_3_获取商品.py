@@ -8,8 +8,18 @@ fail_file = Tool.File.path_add_site('fail/2.csv')
 catch_path = Tool.File.path_add_site('hc/3/catch.json')
 index_path = Tool.File.path_add_site('hc/3/index.json')
 output_ts_file = Tool.File.path_add_site('res/ts_res.csv')
+
+
+class Step3(YMXStep3):
+    requirements = {
+        "simple": ("SKU", "Name", "Images"),
+        "variable": ("SKU", "Name", "Images"),
+        "variation": ("SKU", "Name", "Parent"),
+    }
+
+
 if __name__ == "__main__":
-    YMXStep3(tool=Tool,
+    Step3(tool=Tool,
              input_path=input_path,
              output_path=output_path,
              fail_file=fail_file,

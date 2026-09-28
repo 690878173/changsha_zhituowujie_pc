@@ -88,7 +88,7 @@ class Pc(Get_Product):
                     break
 
             else:
-                for j in ['Shipping & Returns']:
+                for j in ['Navy','Toddler PJ Size Comparison']:
                     if j in name:
                         break
                 else:
