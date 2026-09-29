@@ -1,6 +1,6 @@
 [site]
 base_url = "https://joyrideharness.com"
-site = "joyrideharness.com"
+site = "joyrideharness"
 site_type = "shopify"
 zk = 0.3
 

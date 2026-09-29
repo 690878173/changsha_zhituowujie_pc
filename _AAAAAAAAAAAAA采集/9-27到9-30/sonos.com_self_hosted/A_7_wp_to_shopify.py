@@ -7,7 +7,8 @@ from config import Tool
 
 # ================= 维护区：自定义字段写在这里 =================
 EXTRA_META_COLUMNS = [
-
+    'Features(product.metafields.c_f.features)',
+    "What's included(product.metafields.c_f.what's_included)"
 ]
 
 input_csv = Tool.File.path_add_site(r"res/picture.csv")

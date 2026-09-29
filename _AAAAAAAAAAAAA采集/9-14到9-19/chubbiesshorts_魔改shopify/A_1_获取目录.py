@@ -13,6 +13,9 @@ class ChubbiesMenuParser(CatalogParser):
     """解析 Chubbies ``headerNavMenu`` 的 Shopify React stream 数据。"""
 
     menu_key = 'headerNavMenu'
+    children_key = '_2862'
+    name_key = '_35'
+    url_key = '_196'
 
     def matches(self, html):
         return self.menu_key in html and 'streamController.enqueue(' in html
@@ -47,17 +50,29 @@ class ChubbiesMenuParser(CatalogParser):
         if not isinstance(item, dict):
             return None
 
-        name = self.clean_name(self.node_value(data, item, '_32'))
+        name = self.clean_name(self.node_value(data, item, self.name_key))
         children = {}
-        child_refs = self.node_value(data, item, '_2861', [])
+        child_refs = self.node_value(data, item, self.children_key, [])
         if isinstance(child_refs, list):
             for child_ref in child_refs:
                 self.add_item(data, child_ref, children, collector)
 
-        href = self.collection_path(self.node_value(data, item, '_164'))
+        href = self.collection_path(self.node_value(data, item, self.url_key))
         if not name or (not href and not children):
             return None
         return collector.add_node(nodes, name, href, children)
+
+    @classmethod
+    def navigation_urls(cls, nodes, collector):
+        urls = set()
+        for node in nodes.values():
+            url = node.get('url')
+            if url:
+                normalized_url = collector.normalize_url(url)
+                if normalized_url:
+                    urls.add(normalized_url)
+            urls.update(cls.navigation_urls(node.get('child') or {}, collector))
+        return urls
 
     def parse(self, html, collector):
         data = load_stream_data(html)
@@ -67,7 +82,7 @@ class ChubbiesMenuParser(CatalogParser):
             raise RuntimeError('Chubbies 首页缺少 headerNavMenu 数据') from exc
 
         menu_ref = self.resolve(data, data[menu_index + 1])
-        menu_items = self.node_value(data, menu_ref, '_2861', [])
+        menu_items = self.node_value(data, menu_ref, self.children_key, [])
         if not isinstance(menu_items, list):
             raise RuntimeError('Chubbies headerNavMenu 不是菜单列表')
 
@@ -78,7 +93,7 @@ class ChubbiesMenuParser(CatalogParser):
         # 首页上不属于主导航的公开 collection 链接保留为 Other 二级目录。
         tree = lxml_html.fromstring(html)
         other = {}
-        seen_urls = set()
+        seen_urls = self.navigation_urls(result, collector)
         for link in tree.xpath('//a[@href]'):
             if link.xpath('ancestor::header'):
                 continue
@@ -92,7 +107,7 @@ class ChubbiesMenuParser(CatalogParser):
                 continue
             if collector.add_node(other, name, href) is not None:
                 seen_urls.add(url)
-
+        print(result)
         if other:
             other_name = 'Other' if 'Other' not in result else 'Other2'
             collector.add_node(result, other_name, '', other)
@@ -106,7 +121,7 @@ if __name__ == '__main__':
         Tool,
         base_url,
         Tool.File.path_add_site('data/ml.json'),
-        Path(__file__).parent / 'ts' / '1' / 'homepage.html',
+        Path(__file__).parent / 'ts' / '01-catalog' / 'homepage.html',
     )
     collector.parser_types = (ChubbiesMenuParser,)
     collector.run()
