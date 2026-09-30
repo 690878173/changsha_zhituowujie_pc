@@ -8,11 +8,13 @@ import pandas as pd
 class Shopify_dz:
     """打折基类"""
 
-    def __init__(self, tool, input_path, output_path):
+    def __init__(self, tool, input_path, output_path,zk = None):
         self.tool = tool
         self.Tool = tool
         self.input_path = input_path
         self.output_path = output_path
+
+        self.zk = zk or self.Tool.zk
 
     def run(self):
         self.Tool.File.create_dir(self.output_path)
@@ -29,10 +31,10 @@ class Shopify_dz:
         print(f"检测到价格为 0 的商品 {len(zero_price_handles)} 个，共删除父类和子类数据 {deleted_count} 行")
 
         # 按折扣计算售价
-        df["Variant Price"] = df["Variant Compare At Price"] * self.Tool.zk
+        df["Variant Price"] = df["Variant Compare At Price"] * self.zk
         df["Variant Price"] = df["Variant Price"].round(2)
 
         df.to_csv(self.output_path, index=False)
         print(f"处理完成，新文件已保存到: {self.output_path}")
-        self.Tool.print(f"当前使用折扣:{self.Tool.zk}")
+        self.Tool.print(f"当前使用折扣:{self.zk}")
         return df
