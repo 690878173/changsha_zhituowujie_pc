@@ -599,12 +599,17 @@ MergeLinkVariants(
 `catalog.py` 中定义自己的 `CatCol`，仅通过 `parser_types` 注册解析器；
 `skip_url_ls` 与 `no_url_ls` 默认为空列表。没有 `CatalogCollector`、
 `collect_catalog` 或 `_ljp.mb.catalog` 的兼容入口。
+`CatCol` 在保存目录 JSON 后打印目录树；当 Windows 控制台的编码无法表示某个
+目录字符时，调试输出会使用反斜杠转义而不会让已成功保存的目录步骤失败。
 
 每个具体页面结构解析器必须直接继承 `CatalogParser`，自行实现
 `matches(html)` 和 `parse(html, collector)`。解析器负责其页面结构、节点
 过滤和菜单层级；`CatCol` 负责请求首页、保存原始 HTML、请求失败时读取本地
 快照，以及输出目录 JSON。内置解析器只保留 collection URL，并排除 product
 URL，同时保留无 URL 的分组节点。普通 Shopify 支持
+`FocalInlineNavigationParser`（`nav.header__inline-navigation` 下的 Focal
+mega menu，保留顶级菜单、列标题和 collection 链接，并将导航外的唯一 collection
+链接归入 `Other`）、
 `HeaderInlineMenuParser`、`ShopifyThemeParser`、`ShopifyMainMenuParser` 与
 `MegaMenuDetailsParser`（`nav[aria-label="Primary"]` 下 `details[is="details-mega"]`
 的 mega menu；`mega-menu__shop_all` 容器自身不成节点、链接归上一级并把子级

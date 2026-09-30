@@ -67,7 +67,7 @@ from _ljp.mb.shopify import Get_Product
 class Pc(Get_Product):
     requirements = {
         "simple": ("SKU", "Name", "Description", "Images"),
-        "variable": ("SKU", "Name", "Description", "Images"),
+        "variable": ("SKU", "Name", "Images"),
         "variation": ("SKU", "Name", "Parent"),
     }
 
@@ -78,17 +78,17 @@ class Pc(Get_Product):
 
         Tool.HTML.save(res.text)
         dic = {}
-        for node in html.xpath('//div[@class="product-block product-block__collapsible_tab"]/details'):
-            name = node.xpath('./summary/span/text()')[0]
+        for node in html.xpath('//component-pdp-product-accordion//details'):
+            name = node.xpath('.//div[@class="accordion-title"]/text()')[0]
 
-            for i in ['Details', 'Features']:
+            for i in ['Product Details', 'Features','Size & Fit','Fabric & Care']:
                 if i in name:
-                    value = node.xpath('./div')[0]
+                    value = node.xpath('./div[@class="js-accordion-content accordion-content"]')[0]
                     dic[i] = Tool.HTML.clean_product_desc(value)
                     break
 
             else:
-                for j in ['Navy','Toddler PJ Size Comparison']:
+                for j in ['Shipping & Returns']:
                     if j in name:
                         break
                 else:

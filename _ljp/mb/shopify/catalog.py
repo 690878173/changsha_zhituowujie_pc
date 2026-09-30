@@ -204,6 +204,133 @@ class ShopifyMainMenuParser(CatalogParser):
         return result
 
 
+class FocalInlineNavigationParser(CatalogParser):
+    """解析 Focal 主题的 ``header__inline-navigation`` mega menu。"""
+
+    nav_xpath = (
+        '//nav[contains(concat(" ", normalize-space(@class), " "), '
+        '" header__inline-navigation ")]'
+    )
+
+    def matches(self, html):
+        return 'header__inline-navigation' in html and 'mega-menu__column' in html
+
+    @staticmethod
+    def link_text(element):
+        return _clean_text(' '.join(element.xpath('.//text()[not(ancestor::svg)]')))
+
+    def parse_links(self, links, collector):
+        result = {}
+        for link in links:
+            href = link.get('href') or ''
+            if not _is_collection_url(collector.normalize_url(href)):
+                continue
+            name = self.link_text(link)
+            if name:
+                _put_node(collector, result, name, href)
+        return result
+
+    @staticmethod
+    def collect_urls(nodes, found=None):
+        if found is None:
+            found = set()
+        for node in nodes.values():
+            url = node.get('url')
+            if url:
+                found.add(url)
+            FocalInlineNavigationParser.collect_urls(node.get('child') or {}, found)
+        return found
+
+    def page_link_name(self, link):
+        headings = link.xpath(
+            './/*[contains(concat(" ", normalize-space(@class), " "), " heading ")][1]'
+        )
+        if headings:
+            name = self.link_text(headings[0])
+            if name:
+                return name
+        return _clean_text(link.get('aria-label') or link.get('title') or self.link_text(link))
+
+    def parse_page_links(self, tree, collector, known):
+        extra = {}
+        for link in tree.xpath('//a[@href]'):
+            if link.xpath(
+                'ancestor::nav[contains(concat(" ", normalize-space(@class), " "), '
+                '" header__inline-navigation ")]'
+            ):
+                continue
+            href = link.get('href') or ''
+            url = collector.normalize_url(href)
+            if not url or url in known or not _is_collection_url(url):
+                continue
+            if urlsplit(url).path.rstrip('/').endswith('/collections'):
+                continue
+            name = self.page_link_name(link)
+            if not name:
+                continue
+            unique_name = name
+            if unique_name in extra:
+                handle = urlsplit(url).path.rstrip('/').rsplit('/', 1)[-1]
+                unique_name = f'{name} ({handle})'
+                number = 2
+                while unique_name in extra:
+                    unique_name = f'{name} ({handle} {number})'
+                    number += 1
+            if _put_node(collector, extra, unique_name, href) is not None:
+                known.add(url)
+        return extra
+
+    def parse(self, html, collector):
+        tree = lxml_html.fromstring(html)
+        navs = tree.xpath(self.nav_xpath)
+        if not navs:
+            raise RuntimeError('页面中未找到 header__inline-navigation 菜单')
+
+        result = {}
+        items = navs[0].xpath(
+            './/li[contains(concat(" ", normalize-space(@class), " "), '
+            '" header__linklist-item ")]'
+        )
+        for item in items:
+            name = _clean_text(item.get('data-item-title'))
+            if not name:
+                continue
+            child = {}
+            for column in item.xpath(
+                './/div[contains(concat(" ", normalize-space(@class), " "), '
+                '" mega-menu__column ")]'
+            ):
+                leaves = self.parse_links(column.xpath('./ul/li/a[@href]'), collector)
+                if not leaves:
+                    continue
+                titles = column.xpath(
+                    './span[contains(concat(" ", normalize-space(@class), " "), '
+                    '" mega-menu__title ")][1]'
+                )
+                if titles:
+                    _put_node(collector, child, self.link_text(titles[0]), '', leaves)
+                else:
+                    for leaf_name, leaf in leaves.items():
+                        _put_node(collector, child, leaf_name, leaf['url'], leaf['child'])
+
+            links = item.xpath('./a[@href][1] | ./label/a[@href][1]')
+            href = links[0].get('href') if links else ''
+            if child or _is_collection_url(collector.normalize_url(href)):
+                _put_node(collector, result, name, href, child)
+
+        if not result:
+            raise RuntimeError('Focal 主题菜单没有可用目录')
+        extra = self.parse_page_links(tree, collector, self.collect_urls(result))
+        if extra:
+            group_name = 'Other'
+            number = 2
+            while group_name in result:
+                group_name = f'Other{number}'
+                number += 1
+            _put_node(collector, result, group_name, '', extra)
+        return result
+
+
 class HeaderInlineMenuParser(CatalogParser):
     """解析 Dawn 系 ``header__inline-menu`` 三层菜单。"""
 
@@ -408,6 +535,7 @@ class CatCol(BaseCatCol):
     """普通 Shopify 目录采集器。"""
 
     parser_types = (
+        FocalInlineNavigationParser,
         HeaderInlineMenuParser,
         ShopifyThemeParser,
         ShopifyMainMenuParser,
@@ -419,6 +547,7 @@ class CatCol(BaseCatCol):
 
 __all__ = [
     'CatCol',
+    'FocalInlineNavigationParser',
     'HeaderInlineMenuParser',
     'MegaMenuDetailsParser',
     'ShopifyMainMenuParser',

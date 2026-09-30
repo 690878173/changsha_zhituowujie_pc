@@ -1,6 +1,7 @@
 
 from .catalog import (
     CatCol,
+    FocalInlineNavigationParser,
     HeaderInlineMenuParser,
     MegaMenuDetailsParser,
     ShopifyMainMenuParser,
@@ -18,6 +19,7 @@ __all__ = [
     "Replace_imgs",
     "Collection",
     "CatCol",
+    "FocalInlineNavigationParser",
     "HeaderInlineMenuParser",
     "MegaMenuDetailsParser",
     "ShopifyThemeParser",

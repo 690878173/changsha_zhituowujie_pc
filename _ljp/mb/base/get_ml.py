@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 from typing import TYPE_CHECKING
 from lxml import etree
 
@@ -177,10 +178,19 @@ class CatCol:
     def export_catalog(self, menu):
         self.tool.to_ml_json(menu, self.save_path)
 
+    @staticmethod
+    def print_menu(menu):
+        """打印目录树时兼容非 UTF-8 的 Windows 控制台。"""
+        text = str(menu)
+        encoding = getattr(sys.stdout, 'encoding', None)
+        if encoding:
+            text = text.encode(encoding, errors='backslashreplace').decode(encoding)
+        print(text)
+
     def run(self):
         menu = self.after_parse(self.parse(self.fetch()))
         self.export_catalog(menu)
-        print(menu)
+        self.print_menu(menu)
         return menu
 
 
