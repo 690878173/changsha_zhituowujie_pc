@@ -9,10 +9,10 @@ from pathlib import Path
 
 
 TYPE_ALIASES = {
-    "shopify": ("新_模板shopify", "shopify", "shopify"),
+    "shopify": ("muckbootcompany_shopify", "shopify", "shopify"),
     "mg_shopify": ("新_模板魔改shopify", "mg_shopify", "mg_shopify"),
     # 自建模板依赖空 site_type 生成历史兼容的输出文件名。
-    "self_hosted": ("新_模板自建", "self_hosted", ""),
+    "self_hosted": ("yankeecandle自建", "self_hosted", ""),
     "target": ("greenies_target", "target", "target"),
     "amazon": ("sheamoisture_亚马逊", "amazon", "amazon"),
 }

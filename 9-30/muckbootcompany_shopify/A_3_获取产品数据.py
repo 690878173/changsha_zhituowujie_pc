@@ -59,7 +59,7 @@ cookies = {
 }
 
 if_wp = False
-time_sleep = 2
+time_sleep = 1
 
 from _ljp.mb.shopify import Get_Product
 

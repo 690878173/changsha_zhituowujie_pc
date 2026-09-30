@@ -892,7 +892,7 @@ The maintained templates live under `A模板/`:
 
 | Template | Sequence | Typical artifacts |
 | --- | --- | --- |
-| `新_模板shopify` | A_1 catalog -> A_2 detail URLs -> A_3 products -> A_4 SKU dedupe -> A_5 images -> A_6 Shopify -> A_7 discount -> A_8 collections | `data/ml.json`, `data/detail_url.json`, `res/result.csv`, `fwq/quchong.csv`, `res/picture.csv` |
+| `新_模板shopify` | A_1 catalog -> A_2 detail URLs -> A_3 products -> A_4 SKU dedupe -> A_5 parent attributes -> A_6 images -> A_7 Shopify -> A_8 discount -> A_9 collections | `data/ml.json`, `data/detail_url.json`, `res/result.csv`, `fwq/quchong.csv`, `fwq/variable.csv`, `res/picture.csv` |
 | `新_模板魔改shopify` | A_1 catalog -> A_2 Storefront GraphQL URLs -> A_3 Storefront GraphQL products -> A_4 SKU dedupe -> A_5 images -> A_6 Shopify -> A_7 discount -> A_8 collections | Uses `_ljp.mb.mg_shopify`; keep only site GraphQL settings and site-only field hooks in A_2/A_3 |
 | `新_模板自建` | A_1 -> A_2 -> A_3 -> A_4 -> A_5 variable -> A_6 images -> A_7 Shopify -> A_8 discount -> A_9 collections | same, with `fwq/variable.csv` |
 | `新_模板target` | detail -> products -> dedupe -> parent -> download -> replace -> Shopify -> discount -> collections | browser backend must be `drissionpage` |
